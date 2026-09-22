@@ -133,7 +133,7 @@ func _place_hitbox() -> void:
 func _on_frame_changed() -> void:
 	if state != State.ATTACK:
 		return
-	# Frames 2 and 3 of the 6-frame swing are the active hit.
+	# Frames 2 and 3 are the active hit. Columns 4 and 5 of each attack row are empty.
 	hitbox.monitoring = sprite.frame == 2 or sprite.frame == 3
 
 
@@ -159,19 +159,21 @@ func _ensure_frames() -> void:
 	_add_anim(frames, &"walk_down", ROW_WALK_DOWN, 10.0, true)
 	_add_anim(frames, &"walk_side", ROW_WALK_SIDE, 10.0, true)
 	_add_anim(frames, &"walk_up", ROW_WALK_UP, 10.0, true)
-	_add_anim(frames, &"attack_down", ROW_ATTACK_DOWN, 14.0, false)
-	_add_anim(frames, &"attack_side", ROW_ATTACK_SIDE, 14.0, false)
-	_add_anim(frames, &"attack_up", ROW_ATTACK_UP, 14.0, false)
+	# Attack rows only have art in the first four columns. The last two are blank,
+	# and playing them makes the sprite vanish for a couple of frames.
+	_add_anim(frames, &"attack_down", ROW_ATTACK_DOWN, 14.0, false, 4)
+	_add_anim(frames, &"attack_side", ROW_ATTACK_SIDE, 14.0, false, 4)
+	_add_anim(frames, &"attack_up", ROW_ATTACK_UP, 14.0, false, 4)
 	sprite.sprite_frames = frames
 	sprite.offset = Vector2(0, -18)
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 
-func _add_anim(frames: SpriteFrames, anim_name: StringName, row: int, fps: float, looping: bool) -> void:
+func _add_anim(frames: SpriteFrames, anim_name: StringName, row: int, fps: float, looping: bool, frame_count: int = COLS) -> void:
 	frames.add_animation(anim_name)
 	frames.set_animation_speed(anim_name, fps)
 	frames.set_animation_loop(anim_name, looping)
-	for col in COLS:
+	for col in frame_count:
 		var atlas := AtlasTexture.new()
 		atlas.atlas = SHEET
 		atlas.region = Rect2(col * FRAME, row * FRAME, FRAME, FRAME)
