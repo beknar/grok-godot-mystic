@@ -1,0 +1,13 @@
+[mcp_servers.godot-mcp]
+command = "/home/storm/.local/bin/npx"
+args = [
+    "-y",
+    "@satelliteoflove/godot-mcp",
+]
+enabled = true
+startup_timeout_sec = 60
+
+[mcp_servers.godot-mcp.env]
+PATH = "/home/storm/.local/bin:/usr/bin:/bin"
+GODOT_HOST = "172.31.112.1"
+GODOT_PORT = "6550"

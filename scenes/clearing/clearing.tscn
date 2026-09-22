@@ -1,0 +1,21 @@
+[gd_scene load_steps=3 format=3 uid="uid://bclearingmeadow01"]
+
+[ext_resource type="Script" path="res://scripts/clearing.gd" id="1_clearing"]
+[ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="2_player"]
+
+[node name="Clearing" type="Node2D"]
+script = ExtResource("1_clearing")
+
+[node name="Ground" type="TileMapLayer" parent="."]
+
+[node name="Deco" type="TileMapLayer" parent="."]
+
+[node name="Actors" type="Node2D" parent="."]
+y_sort_enabled = true
+
+[node name="Player" parent="Actors" instance=ExtResource("2_player")]
+position = Vector2(512, 352)
+
+[node name="Bounds" type="StaticBody2D" parent="."]
+collision_layer = 1
+collision_mask = 0

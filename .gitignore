@@ -1,0 +1,8 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Mystic Woods art. Game Endeavor's license does not allow redistribution.
+/assets/pack/
+/docs/pack-reference.png
+/docs/pack-reference.png.import
