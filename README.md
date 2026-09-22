@@ -21,9 +21,11 @@ Collision comes from bodies and tile polygons. Characters and UI stay off the ti
 
 ## Current state
 
-Playable scene: `scenes/clearing/clearing.tscn`.
+Playable scene: `scenes/clearing/clearing.tscn`. The layout is generated from a fixed seed (`21021`), so it is the same every launch.
 
-- A 64×40 meadow of the pack grass tile, with flowers, rocks, trees, and a rail fence.
+- A 70×46 meadow. Height and moisture are fractal noise. High ground becomes a cliff plateau from `plains.png`, low wet ground becomes water, and a two-tile dirt path with the pack's rounded corners runs from the spawn clearing to a small shrine.
+- Cliff tops and water are blocked. Grass and the dirt path are walkable. A flood fill from the spawn reaches the shrine.
+- Trees, flowers, and rocks are scattered from the pack onto open grass.
 - The player walks in eight directions at 80 pixels per second. Diagonals are normalized so they are not faster.
 - Any left or right input, including a diagonal, uses the side-facing walk. Pure up shows the back. Pure down shows the face. Left is the side row flipped.
 - Standing still plays the forward idle. The facing stored for the next swing does not change while you stand still.
@@ -53,13 +55,14 @@ Godot_v4.6.1-stable_win64.exe --path E:\code\grok-godot-mystic
 
 ```
 scenes/clearing/clearing.tscn   meadow root
-scripts/clearing.gd             paints ground and deco, spawns trees, fence, bounds
+scripts/terrain.gd              noise, biomes, autotile ids, path, props
+scripts/clearing.gd             paints those ids and spawns props
 scenes/player/player.tscn       CharacterBody2D, sprite, camera, hitbox
 scripts/player.gd               movement, facing, swing
 assets/pack/sprites/            Mystic Woods files used by this slice
 ```
 
-`clearing.gd` builds the map when the scene enters the tree. Ground is one cell of `grass.png`. Flowers and the large rock come from `decor_16x16.png`, which uses the same meadow green, so they sit on the fill without a seam. Trees and bushes are regions of `objects/objects.png`, y-sorted with the player, origin at the trunk base. Fence posts are column 2, row 0 of `fences.png`. A static body around the map edge keeps the player inside.
+`terrain.gd` writes a tile-id grid. Meadow fill is `grass.png`. Dirt, cliffs, and water are atlas cells in `plains.png` (rows 0–3, 4–6, and 8–11). Flowers and rocks come from `decor_16x16.png`. Trees are regions of `objects/objects.png`, y-sorted with the player. A static body covers cliff cells, water cells, and the map edge.
 
 `player.gd` reads `player.png` at runtime. The sheet is 6 columns by 10 rows of 48×48. Rows are 0-based, from the pack's character readme:
 

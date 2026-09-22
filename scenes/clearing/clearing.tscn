@@ -8,6 +8,8 @@ script = ExtResource("1_clearing")
 
 [node name="Ground" type="TileMapLayer" parent="."]
 
+[node name="Features" type="TileMapLayer" parent="."]
+
 [node name="Deco" type="TileMapLayer" parent="."]
 
 [node name="Actors" type="Node2D" parent="."]
