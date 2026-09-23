@@ -1,0 +1,60 @@
+[gd_scene load_steps=9 format=3 uid="uid://bheathfighter01"]
+
+[ext_resource type="Script" path="res://scripts/clearing.gd" id="1_clearing"]
+[ext_resource type="Script" path="res://scripts/lineup.gd" id="2_lineup"]
+[ext_resource type="Script" path="res://scripts/character_display.gd" id="3_display"]
+[ext_resource type="Texture2D" path="res://assets/pack/sprites/characters/player.png" id="4_woods"]
+[ext_resource type="Texture2D" path="res://assets/ai/characters/wanderer.png" id="5_wanderer"]
+[ext_resource type="Texture2D" path="res://assets/ai/characters/scout.png" id="6_scout"]
+[ext_resource type="Texture2D" path="res://assets/ai/characters/warrior-16x16-sheet.png" id="7_warrior"]
+[ext_resource type="Texture2D" path="res://assets/ai/characters/red-fighter-16x16.png" id="8_fighter"]
+
+[node name="Heath" type="Node2D"]
+script = ExtResource("1_clearing")
+map_seed = 91003
+include_water = false
+
+[node name="Ground" type="TileMapLayer" parent="."]
+
+[node name="Features" type="TileMapLayer" parent="."]
+
+[node name="Deco" type="TileMapLayer" parent="."]
+
+[node name="Actors" type="Node2D" parent="."]
+y_sort_enabled = true
+
+[node name="Lineup" type="Node2D" parent="."]
+script = ExtResource("2_lineup")
+spacing = 72.0
+
+[node name="Woods" type="AnimatedSprite2D" parent="Lineup"]
+script = ExtResource("3_display")
+character_sheet = ExtResource("4_woods")
+frame_size = 48
+
+[node name="Wanderer" type="AnimatedSprite2D" parent="Lineup"]
+script = ExtResource("3_display")
+character_sheet = ExtResource("5_wanderer")
+frame_size = 48
+
+[node name="Scout" type="AnimatedSprite2D" parent="Lineup"]
+script = ExtResource("3_display")
+character_sheet = ExtResource("6_scout")
+frame_size = 48
+
+[node name="Warrior" type="AnimatedSprite2D" parent="Lineup"]
+script = ExtResource("3_display")
+character_sheet = ExtResource("7_warrior")
+frame_size = 16
+
+[node name="RedFighter" type="AnimatedSprite2D" parent="Lineup"]
+script = ExtResource("3_display")
+character_sheet = ExtResource("8_fighter")
+frame_size = 16
+
+[node name="Camera2D" type="Camera2D" parent="."]
+zoom = Vector2(5, 5)
+
+[node name="Bounds" type="StaticBody2D" parent="."]
+collision_layer = 1
+collision_mask = 0

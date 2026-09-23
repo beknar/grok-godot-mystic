@@ -8,6 +8,8 @@ const DECOR: Texture2D = preload("res://assets/pack/sprites/tilesets/decor_16x16
 const OBJECTS: Texture2D = preload("res://assets/pack/sprites/objects/objects.png")
 const TerrainScript := preload("res://scripts/terrain.gd")
 
+@export var map_seed: int = 21021
+@export var include_water: bool = true
 var generation_report := ""
 var _built := false
 
@@ -20,7 +22,7 @@ func _build() -> void:
 	if _built and not Engine.is_editor_hint():
 		return
 	_built = true
-	var data: Dictionary = TerrainScript.new().generate()
+	var data: Dictionary = TerrainScript.new().generate(map_seed, include_water)
 	generation_report = str(data["report"])
 	print(generation_report)
 	_paint(data)
@@ -28,13 +30,55 @@ func _build() -> void:
 	_spawn_props(data["props"])
 	_build_bounds(int(data["width"]), int(data["height"]), data["biome"])
 	var spawn: Vector2i = data["spawn"]
-	var player := $Actors/Player
-	player.position = Vector2(spawn.x * TILE + 8, spawn.y * TILE + TILE)
-	var camera := player.get_node("Camera2D") as Camera2D
+	var origin := Vector2(spawn.x * TILE + 8, spawn.y * TILE + TILE)
+	var lineup := get_node_or_null("Lineup")
+	if lineup != null and lineup.has_method("place"):
+		_clear_lineup_ground(origin, lineup.get_child_count(), lineup.spacing)
+		lineup.place(origin)
+	if has_node("Actors/Player"):
+		var player := $Actors/Player
+		player.position = origin
+		var camera := player.get_node("Camera2D") as Camera2D
+		_frame_camera(camera, int(data["width"]), int(data["height"]))
+	elif has_node("Camera2D"):
+		var camera := $Camera2D as Camera2D
+		camera.position = origin
+		_frame_camera(camera, int(data["width"]), int(data["height"]))
+
+
+func _frame_camera(camera: Camera2D, w: int, h: int) -> void:
 	camera.limit_left = 0
 	camera.limit_top = 0
-	camera.limit_right = int(data["width"]) * TILE
-	camera.limit_bottom = int(data["height"]) * TILE
+	camera.limit_right = w * TILE
+	camera.limit_bottom = h * TILE
+	camera.enabled = not Engine.is_editor_hint()
+	if camera.enabled:
+		camera.make_current()
+
+
+func _clear_lineup_ground(origin: Vector2, count: int, spacing: float) -> void:
+	var half := (count - 1) * spacing * 0.5 + 40.0
+	var x0 := int((origin.x - half) / TILE)
+	var x1 := int((origin.x + half) / TILE)
+	var y0 := int((origin.y - 48.0) / TILE)
+	var y1 := int((origin.y + 16.0) / TILE)
+	var ground := $Ground as TileMapLayer
+	var features := $Features as TileMapLayer
+	var deco := $Deco as TileMapLayer
+	for y in range(y0, y1 + 1):
+		for x in range(x0, x1 + 1):
+			var cell := Vector2i(x, y)
+			ground.set_cell(cell, 0, Vector2i.ZERO)
+			features.erase_cell(cell)
+			deco.erase_cell(cell)
+	# Trees are taller than the strip, so drop any prop whose base is just above the lineup.
+	var rect := Rect2(origin.x - half, origin.y - 96.0, half * 2.0, 120.0)
+	for child in $Bounds.get_children():
+		if child is CollisionShape2D and rect.has_point(child.position):
+			child.free()
+	for child in $Actors.get_children():
+		if child.is_in_group("world_prop") and rect.has_point(child.position):
+			child.free()
 
 
 func _paint(data: Dictionary) -> void:

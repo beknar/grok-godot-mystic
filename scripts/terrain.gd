@@ -8,7 +8,9 @@ extends RefCounted
 # Rows 4-7: cliff top and south-facing wall.
 # Rows 8-11: water, same corner layout as the dirt block shifted down 8 rows.
 
-const SEED := 21021
+const DEFAULT_SEED := 21021
+var _seed := DEFAULT_SEED
+var _with_water := true
 const WIDTH := 70
 const HEIGHT := 46
 
@@ -30,8 +32,10 @@ var shrine := Vector2i(18, 12)
 var report := ""
 
 
-func generate() -> Dictionary:
-	_rng.seed = SEED
+func generate(seed_value: int = -1, with_water: bool = true) -> Dictionary:
+	_seed = DEFAULT_SEED if seed_value < 0 else seed_value
+	_with_water = with_water
+	_rng.seed = _seed
 	var n := WIDTH * HEIGHT
 	_biome = PackedInt32Array()
 	_biome.resize(n)
@@ -44,13 +48,15 @@ func generate() -> Dictionary:
 	_sample_biomes()
 	for _pass in 3:
 		_smooth(HIGH, 4, 6)
-		_smooth(WATER, 4, 6)
+		if _with_water:
+			_smooth(WATER, 4, 6)
 	_erode(HIGH, 2)
 	_cull_small(HIGH, 40)
-	_cull_small(WATER, 12)
+	if _with_water:
+		_cull_small(WATER, 12)
 	_place_arenas()
 	_autotile()
-	var river_len := _carve_river()
+	var river_len := _carve_river() if _with_water else 0
 	var path := _carve_path()
 	_autotile()
 	_break_duplicate_fills(DIRT)
@@ -81,7 +87,7 @@ func _sample_biomes() -> void:
 			var b := GRASS
 			if h > 0.64:
 				b = HIGH
-			elif h < 0.36 and m < 0.40:
+			elif _with_water and h < 0.36 and m < 0.40:
 				b = WATER
 			_biome[_i(x, y)] = b
 
@@ -523,7 +529,7 @@ func _verify(path_len: int, river_len: int, prop_count: int) -> String:
 	var dirt_dupes := _duplicate_windows(DIRT)
 	var high_dupes := _duplicate_windows(HIGH)
 	return "seed=%d %dx%d grass=%d dirt=%d high=%d water=%d path=%d river=%d props=%d bad_gids=%d shrine_reached=%s dirt_3x3_dupes=%d plateau_3x3_dupes=%d" % [
-		SEED, WIDTH, HEIGHT, counts[GRASS], counts[DIRT], counts[HIGH], counts[WATER],
+		_seed, WIDTH, HEIGHT, counts[GRASS], counts[DIRT], counts[HIGH], counts[WATER],
 		path_len, river_len, prop_count, bad, str(reached), dirt_dupes, high_dupes,
 	]
 
@@ -691,7 +697,7 @@ func _value_noise(x: float, y: float) -> float:
 
 
 func _hash2(x: int, y: int) -> float:
-	var n := (x * 374761393) ^ (y * 668265263) ^ SEED
+	var n := (x * 374761393) ^ (y * 668265263) ^ _seed
 	n = (n ^ (n >> 13)) * 1274126177
 	n = n ^ (n >> 16)
 	return float(n & 0x7fffffff) / 2147483647.0

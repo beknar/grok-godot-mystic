@@ -4,5 +4,7 @@
 
 # Mystic Woods art. Game Endeavor's license does not allow redistribution.
 /assets/pack/
+# The Painted Lands. antarcticbees does not allow redistributing the tiles.
+/assets/painted-lands/
 /docs/pack-reference.png
 /docs/pack-reference.png.import
