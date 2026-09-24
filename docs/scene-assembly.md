@@ -23,7 +23,7 @@ Slice rule: `tileId = row * cols + col`. Record GID / firstgid if using Tiled.
 | Scenes | Pack | Generator |
 |---|---|---|
 | clearing, grove, hollow, ford, heath | Mystic Woods | `scripts/terrain.gd` — `AGENTS.md` § Mystic Woods |
-| forest, garden, crossing | Painted Lands | `scripts/forest_terrain.gd`, `scripts/garden_terrain.gd`, `scripts/crossing_terrain.gd` — `AGENTS.md` § Painted Lands and §6 below |
+| forest, garden, crossing, wilds | Painted Lands | `scripts/forest_terrain.gd`, `scripts/garden_terrain.gd`, `scripts/crossing_terrain.gd`, `scripts/wilds_terrain.gd` — `AGENTS.md` § Painted Lands and §6 below |
 
 Heath and forest may share a numeric seed. They do not share a generator.
 

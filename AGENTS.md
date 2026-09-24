@@ -6,7 +6,7 @@ or “done” checks.
 | Maps | Pack | Code | Rules in this file |
 |---|---|---|---|
 | clearing, grove, hollow, ford, heath | Mystic Woods: `plains.png`, `grass.png` under `assets/pack/` | `scripts/terrain.gd`, `scripts/clearing.gd` | § Mystic Woods |
-| forest, garden, crossing | Painted Lands: `assets/pack/TILESET_brighter.png` | `scripts/forest_terrain.gd`, `scripts/garden_terrain.gd`, `scripts/crossing_terrain.gd` | § Painted Lands |
+| forest, garden, crossing, wilds | Painted Lands: `assets/pack/TILESET_brighter.png` | `scripts/forest_terrain.gd`, `scripts/garden_terrain.gd`, `scripts/crossing_terrain.gd`, `scripts/wilds_terrain.gd` | § Painted Lands |
 
 `docs/scene-assembly.md` §0–5 is shared inventory. §6 is Painted Lands
 only. Mystic Woods generation detail stays in this file under
@@ -93,6 +93,10 @@ Painted Lands map (pipeline: § Painted Lands):
 - `scenes/forest/forest.tscn` — seed `91003` (not the heath generator),
   recipe A, `assets/pack/TILESET_brighter.png`.
 - `scenes/garden/garden.tscn` — seed `77241`, recipe D. Same sheet.
+- `scenes/wilds/wilds.tscn` — map id `44119`. Recipe is chosen from
+  that id (this seed is C, pond walk). Height and moisture are masks.
+  The path is one 2-wide road from the west edge to the house, with
+  one short rise. Same sheet and walker.
 - `scenes/crossing/crossing.tscn` — seed `33017`. A 2-wide cross,
   two northeast steps, two fenced houses, two rounded dirt patches,
   and one shore-edged pond. Same sheet.
