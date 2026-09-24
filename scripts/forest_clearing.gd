@@ -13,11 +13,15 @@ func _ready() -> void:
 	_build()
 
 
+func _generate() -> Dictionary:
+	return TerrainScript.new().generate()
+
+
 func _build() -> void:
 	if _built and not Engine.is_editor_hint():
 		return
 	_built = true
-	var data: Dictionary = TerrainScript.new().generate()
+	var data: Dictionary = _generate()
 	generation_report = str(data["report"])
 	print(generation_report)
 	_paint(data)

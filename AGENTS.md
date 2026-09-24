@@ -1,44 +1,62 @@
+## Which pack (read this first)
+
+This repo has two map languages. Do not mix their pipelines, sheets,
+or “done” checks.
+
+| Maps | Pack | Code | Rules in this file |
+|---|---|---|---|
+| clearing, grove, hollow, ford, heath | Mystic Woods: `plains.png`, `grass.png` under `assets/pack/` | `scripts/terrain.gd`, `scripts/clearing.gd` | § Mystic Woods |
+| forest, garden | Painted Lands: `assets/pack/TILESET_brighter.png` | `scripts/forest_terrain.gd`, `scripts/garden_terrain.gd` | § Painted Lands |
+
+`docs/scene-assembly.md` §0–5 is shared inventory. §6 is Painted Lands
+only. Mystic Woods generation detail stays in this file under
+§ Mystic Woods.
+
+Heath and forest both use seed `91003`. That is coincidence. Heath
+still runs the Mystic Woods pipeline with `include_water` false.
+Forest never calls `terrain.gd`.
+
 ## Scene assembly (backgrounds + playing field)
 
-Doctrine: assemble from the asset pack. Do not invent a new art style
-or generate a full painted backdrop unless a tile is missing.
+Doctrine: assemble from the pack for that map. Do not invent a new
+art style or generate a full painted backdrop unless that pack is
+missing a tile.
 
 Source of truth:
-- Pack root: `assets/pack/`   # change this path
+- Pack root: `assets/pack/`
 - Manifest: `docs/art-pack.md` and `assets/pack/tileset.json` (if present)
 - Procedure: `docs/scene-assembly.md`
 - Skills: `game-asset-core`, `game-tilesets` (seam checks). Maps: `generate2dmap`.
 
-Hard rules
-1. Read the pack before drawing anything. List tile size, grid, camera
-   (top-down / ortho / side), palette, and layer names.
-2. All world art snaps to the pack tile size (e.g. 16 or 32). No
+Hard rules (both packs)
+1. Read the pack for *this* scene before drawing. List tile size, grid,
+   camera, palette, and layer names.
+2. All world art snaps to that pack’s tile size (16px here). No
    free-placed bitmaps that ignore the grid.
 3. Playing field = tilemap layers, not one flattened JPEG:
    ground → terrain transitions → props/deco → collision/occluders →
    actors/UI (code, not baked into tiles).
-4. Match the pack: same pixel density, outline weight, lighting
-   direction, and saturation. If a generated tile fights the pack,
-   discard it and reuse pack tiles.
+4. Match that pack: pixel density, outline weight, lighting, saturation.
+   If a generated tile fights the pack, discard it and reuse pack tiles.
 5. Never generate a unique “hero rock” as a repeating ground tile.
    Distinctive motifs belong on the prop layer once.
-6. New tiles only when the pack lacks a terrain or transition. Generate
-   at exact cell size, then verify a 3×3 (or 2×2) PIL composite for
-   seams and repeating blobs (`game-tilesets`).
+6. New tiles only when *that* pack lacks a terrain or transition.
+   Generate at exact cell size, then verify a 3×3 PIL composite
+   (`game-tilesets`). Painted Lands dirt caps, edges, and knuckles
+   already exist — do not generate replacements for those cells.
 7. Collision comes from a layer or tile flags, not from guessing
    opaque pixels on the background.
 8. Characters and UI stay separate sprites. Do not paint them into
    the background.
 
-Done means: map loads on-grid, pack tiles dominate the screen, no
-visible tile grid, collision matches walkable ground, and a screenshot
-of the scene sits next to a pack reference strip.
+Done means: map loads on-grid, that pack’s tiles dominate the screen,
+collision matches walkable ground, and a screenshot sits next to a
+strip from the same pack.
 
 ## What this project can do
 
-Godot 4.6, GL Compatibility. One scene, `scenes/clearing/clearing.tscn`.
-Window 3440×1440, camera zoom 5, nearest filtering, so each 16px tile
-is 80 screen pixels.
+Godot 4.6, GL Compatibility. Window 3440×1440, camera zoom 5, nearest
+filtering, so each 16px tile is 80 screen pixels.
 
 Player (`scripts/player.gd`, `player.png`, 48×48, 6 columns):
 
@@ -58,207 +76,51 @@ Player (`scripts/player.gd`, `player.png`, 48×48, 6 columns):
 Physics layers, in order: `world`, `player`, `enemy`, `hurtbox`, `hitbox`.
 The player is on `player` and collides with `world`.
 
-`scenes/grove/grove.tscn` is the second map, seed `90511`, same pack
-tiles. Its character sheet is `assets/ai/characters/wanderer.png`.
-`scenes/hollow/hollow.tscn` is the third map, seed `44107`, same pack
-tiles, character sheet `assets/ai/characters/scout.png`.
-`scenes/ford/ford.tscn` is the fourth map, seed `12809`, same pack
-tiles. Its sheet is `assets/ai/characters/warrior-16x16-sheet.png`,
-6 columns by 10 rows of 16×16, same row order as `player.png`.
-Set `frame_size` to 16 for that sheet.
-`scenes/heath/heath.tscn` is the fifth map, seed `91003`, same pack
-tiles, `include_water` false so the lake and river are skipped.
-Its sheet is `assets/ai/characters/red-fighter-16x16.png`, also 16×16
-cells in the same ten-row order. The heath scene does not control any
-character. `Lineup` places all five sheets 72px apart on one foot line.
-`scenes/forest/forest.tscn` is the sixth map, seed `91003`. It uses
-`assets/pack/TILESET_brighter.png` (The Painted Lands), not Mystic Woods.
-Lawn, pond, and fence are separate systems. The dirt path follows the
-procedure below. `character_sprite_sheet.png` is 3 columns by 4 rows of
-32px, all facing the camera. Row 0 idles, row 1 walks. There is no
-attack row. Movement is still eight-direction.
+Mystic Woods maps (pipeline: § Mystic Woods):
 
-## Painted Lands dirt path (rounded ends)
+- `scenes/clearing/clearing.tscn` — seed `21021`, `player.png`
+- `scenes/grove/grove.tscn` — seed `90511`, `assets/ai/characters/wanderer.png`
+- `scenes/hollow/hollow.tscn` — seed `44107`, `assets/ai/characters/scout.png`
+- `scenes/ford/ford.tscn` — seed `12809`, `assets/ai/characters/warrior-16x16-sheet.png`
+  (6×10 of 16×16, same row order as `player.png`; `frame_size` 16)
+- `scenes/heath/heath.tscn` — seed `91003`, `include_water` false,
+  `assets/ai/characters/red-fighter-16x16.png`. Heath does not control
+  a character. `Lineup` places all five Mystic Woods sheets 72px apart
+  on one foot line.
 
-Sheet: `assets/pack/TILESET_brighter.png`, 16×16 cells. Code:
-`scripts/forest_terrain.gd` (`_lay_path`, `_widen_run`, `_path_gid`).
-Do this only for that sheet. Leave the flat grass fill, the 5×3 pond
-strip (columns 44–46, rows 0–2), and the fence kit alone.
+Painted Lands map (pipeline: § Painted Lands):
 
-Classify a sand cell by its four 8×8 quadrants, written NW NE / SW SE.
-G means that quadrant is grass. D means dirt.
-
-| Role | Quadrants | Atlas cell | Use |
-|---|---|---|---|
-| Fill | DD/DD | `(22, 1)` | Interior only. All four neighbors are path. |
-| North edge | GG/DD | `(22, 0)` | Grass on the north. North row of a 2-wide run, and a 1-wide east-west run. |
-| South edge | DD/GG | `(22, 2)` | Grass on the south. South row of a 2-wide run. |
-| West edge | GD/GD | `(21, 1)` | Grass on the west. |
-| East edge | DG/DG | `(23, 1)` | Grass on the east. |
-| NW cap | GG/GD | `(21, 0)` | Dirt only in the SE quadrant. North cell of the west end column. |
-| NE cap | GG/DG | `(23, 0)` | Dirt only in the SW quadrant. North cell of the east end column. |
-| SW corner | GD/GG | `(21, 2)` | Dirt only in the NE quadrant. South cell of the west end column. |
-| SE corner | DG/GG | `(23, 2)` | Dirt only in the NW quadrant. South cell of the east end column. |
-| Inner NW | GD/DD | `(23, 5)` | Grass only in the NW quadrant. Inside crotch of a bend. |
-| Inner NE | DG/DD | `(21, 5)` | Grass only in the NE quadrant. |
-| Inner SW | DD/GD | `(23, 3)` | Grass only in the SW quadrant. |
-| Inner SE | DD/DG | `(21, 3)` | Grass only in the SE quadrant. |
-
-Neighbor bits when choosing a GID: N=1, E=2, S=4, W=8. A set bit means
-that neighbor is also path. Fill is mask 15 only. A cell with two or
-more grass neighbors is never fill.
-
-Procedure that produced the rounded ends:
-
-1. Draw one 4-connected east-west polyline on walkable grass. On this
-   sheet a one-tile vertical step opens a gap between the rounded
-   pieces, so this ribbon does not jog. A 2-tile riser is the next
-   section, not a change to this one.
-2. If the run is at least 4 tiles, add a south cell under every
-   centerline cell, including both ends. The south row then occupies
-   the same columns as the north row. Drop any path cell outside that
-   column span or outside those two rows.
-3. Autotile every path cell from the mask above.
-4. After autotile, force the two end columns. Do not leave this to the
-   mask, and do not add a third cell beside the stack.
-
-```
-West column:  (21, 0) over (21, 2)
-East column:  (23, 0) over (23, 2)
-```
-
-The north cell is the same rounded dirt-on-grass cap already used for
-the top of the path. The south cell is that cap mirrored down: grass
-toward the south and toward the outside of the road. Both rows stop in
-that column. Nothing sits past it, and nothing hangs south of it.
-
-What failed, and must not be repeated:
-
-- Path fill `(22, 1)` on an end, or on any cell that touches grass on
-  two adjacent sides. The end reads as a square cobble tooth.
-- A south row that starts or ends one column inside the north row.
-  That is an L: the extra south cell stays square, and a cap placed
-  beside the stack comes back as an orphan tile.
-- A 2-tile-tall blunt end (two fill tiles side by side).
-- A one-tile jog, or a stair that steps one cell east and one cell
-  north. Straight sand edges meet east-west. A single vertical shift
-  opens a gap. The only rise this sheet gets is the 2-tile riser in
-  the next section, and both of its bends are full 2×2 knuckles.
-- Drawing a new rounded pixel. Only these sheet cells.
-
-Accept when both ends show grass eating the outer corner on the top
-and on the bottom, the long edges show the sheet's grass fringe, and
-no path cell past the end columns remains.
-
-## Painted Lands dirt path (approximate 45°)
-
-Addition to the rounded-end ribbon above. Same sheet, same caps, same
-edge cells. One approximate diagonal per scene. The forest map aims
-northeast toward the house: long east, a 2-tile riser, long east again.
-Mirror the knuckles for a southeast, northwest, or southwest lean.
-Leave the lawn, the pond, the fence, and the house split alone.
-
-Every cell is 4-connected. No diagonal neighbor counts as connected.
-Do not place a line of fill along 45°, and do not split a cell into
-quarter tiles to fake that line.
-
-Three segments, each 2 tiles wide:
-
-1. Long west-to-east run, at least 8 tiles. On the forest map this is
-   the existing lower ribbon, rows `house.y + 5` and `house.y + 6`.
-2. Short northbound riser. Exactly 2 tiles of new road past the first
-   knuckle: the same two columns, two rows tall. Not a 1-tile jog.
-3. Long eastbound run, at least 6 tiles, on those two new rows. The
-   forest map ends it at `house.x` with the stacked east cap.
-
-```
-################
-################
-              ##
-              ##
-              ##########
-              ##########
-```
-
-Both rows of a horizontal leg stop on the same column. Both columns
-of the riser stop on the same row. Nothing hangs one cell past a cap
-or a knuckle.
-
-The forest riser is columns `house.x - 7` and `house.x - 6`. Call the
-west of those the inner column and the east one the outer column.
-`low_n` / `low_s` are the lower road. `high_n` / `high_s` are the two
-rows directly above `low_n`.
-
-Lower knuckle, east then north. Outside lawn is south and east.
-
-```
-inner (23, 5)     east edge (23, 1)
-south edge (22, 2)    outer (23, 2)
-```
-
-`(23, 5)` is the inside bite, grass only in the northwest. `(23, 2)`
-is the same rounded southeast cap as the east end of a flat road.
-
-Upper knuckle, north then east. Outside lawn is north and west.
-
-```
-outer (21, 0)      north edge (22, 0)
-west edge (21, 1)      inner (21, 3)
-```
-
-`(21, 0)` is the rounded northwest cap. `(21, 3)` is the inside bite,
-grass only in the southeast. East of the outer column, `high_n` stays
-the north edge `(22, 0)` and `high_s` stays the south edge `(22, 2)`.
-
-Straight runs keep the edge tiles from the table. Fill `(22, 1)` only
-on a cell with path on all four sides in the middle of a wider tube.
-A 2-wide road has no such cell. The inner-bite cells are never fill.
-
-Caps stay the stacked pairs already in use:
-
-```
-West end:  (21, 0) over (21, 2)
-East end:  (23, 0) over (23, 2)
-```
-
-Hard limits:
-
-- Never offset by one tile and then one tile. The rise past the
-  lower knuckle is at least 2 path tiles. On the forest map those two
-  rows are the upper knuckle, and the road turns east from there.
-  Prefer a riser of 2–4. Past 6 tiles the rise reads as a second road,
-  not a diagonal.
-- One step per scene. A second riser becomes a sawtooth.
-- Force both knuckles after any autotile. The mask will mark the
-  inner cell as fill because all four neighbors are path.
-
-What is still forbidden:
-
-- A stair of one cell east and one cell north.
-- Fill `(22, 1)` on either knuckle, or a 2×2 of fill at a bend.
-- Quarter tiles used as a diagonal split.
-- A new cliff, a new pond, or a moved house.
-
-Accept when each corner still reads as the rounded L, the outside
-elbow is a cap tile, the inside is one grass-bite tile, and the two
-bends plus the short riser lean the road toward the house. No
-sawtooth edge.
-
-## Art directories
-
-`assets/pack/` is hand-painted Mystic Woods. `assets/ai/` is generated
-in Grok Build and is labeled in `assets/ai/README.md`. Never put a
-generated sheet in `assets/pack/`. The wanderer sheet matches the
-player grid: 48×48, 6 columns, 10 rows, attack columns 0–3 only.
+- `scenes/forest/forest.tscn` — seed `91003` (not the heath generator),
+  recipe A, `assets/pack/TILESET_brighter.png`.
+- `scenes/garden/garden.tscn` — seed `77241`, recipe D. Same sheet.
+  The walker is `character_sprite_sheet.png`, 3×4 of 32px (two tiles
+  tall). Row 0 idles, row 1 walks. No attack row. Movement is still
+  eight-direction. Both scenes instance `scenes/forest/walker.tscn`.
 
 There is no health, enemy, or save. The editor addon
 `addons/godot_mcp` is how this repo is driven from the Godot MCP server.
 
-## Terrain generation
+## Art directories
+
+`assets/pack/` holds *hand-painted* sheets for both languages:
+
+- Mystic Woods: `plains.png`, `grass.png`, and the original woods set
+- Painted Lands: `TILESET_brighter.png`
+
+`assets/ai/` is generated in Grok Build (`assets/ai/README.md`).
+Never put a generated sheet in `assets/pack/`. The wanderer sheet
+matches the player grid: 48×48, 6 columns, 10 rows, attack columns
+0–3 only.
+
+---
+
+# Mystic Woods
+
+Do not apply this section to `forest.tscn` or `TILESET_brighter.png`.
 
 `scripts/terrain.gd` writes a tile-id grid. `scripts/clearing.gd` paints
-it. Seed `21021`, size 70×46. The same grid comes up every launch.
-Output is atlas coordinates, never a painted bitmap.
+it. Clearing seed `21021`, size 70×46. Same grid every launch for that
+seed. Output is atlas coordinates, never a painted bitmap.
 
 `plains.png` is 6×12 cells of 16px:
 
@@ -312,11 +174,199 @@ Pipeline, in order:
     Interior dirt 3×3s and plateau 3×3s are unique. The report string
     is printed from `clearing.gd`.
 
-Painting order in the scene: grass on `Ground` for every cell, feature
-ids on `Features`, flowers on `Deco`, y-sorted trees and the shrine on
+Painting order: grass on `Ground` for every cell, feature ids on
+`Features`, flowers on `Deco`, y-sorted trees and the shrine on
 `Actors`. Collision is a static body on cliff cells, water cells, and
 a ring outside the map. Grass and dirt stay open.
 
-When extending this, add biomes as more ids from `plains.png` or
-another pack sheet. Keep the same pipeline: noise, thresholds, smooth,
-carve, re-autotile, scatter, then the three checks above.
+When extending Mystic Woods, add biomes as more ids from `plains.png`
+or another *Mystic Woods* sheet. Keep this pipeline: noise, thresholds,
+smooth, carve, re-autotile, scatter, then the three checks above.
+
+---
+
+# Painted Lands
+
+Do not apply this section to clearing, grove, hollow, ford, or heath.
+Do not call `terrain.gd` from forest.
+
+Sheet: `assets/pack/TILESET_brighter.png`, 16×16 cells.
+Code: `scripts/forest_terrain.gd` (`_lay_path`, `_widen_run`, `_path_gid`).
+
+## How to use these notes
+
+Two jobs, one sheet:
+
+1. **How dirt, water, fences, and the house draw** — the autotile
+   tables and y-sort split. These methods stay. Do not invent pixels
+   or swap in Mystic Woods dirt from `plains.png`.
+2. **Where those systems go on a seed** — § Layout recipes. Changing
+   a seed may add, omit, or move a pond, fence yard, path branch, or
+   (Lookout only) one plateau. That is not a regression of (1).
+
+“Leave the grass / pond / fence / house alone” means: do not restyle
+them and do not break their autotile. It does **not** freeze the
+current forest screenshot when the task is a new seed or recipe.
+
+The 5×3 block at atlas columns 44–46, rows 0–2 is the **water
+autotile source on the sheet**, not the size of the lake in the
+world. Do not stamp a 5×3 rectangle of wave fill as the pond.
+
+Quadrant labels (NW NE / SW SE) describe how to *pick* a 16×16 atlas
+cell. They are not a license to slice that cell into four world
+tiles. Never split a cell to fake a 45° road.
+
+## Dirt path atlas
+
+Classify a sand cell by its four 8×8 quadrants, written NW NE / SW SE.
+G = grass in that quadrant of the *atlas cell*. D = dirt.
+
+| Role | Quadrants | Atlas cell | Use |
+|---|---|---|---|
+| Fill | DD/DD | `(22, 1)` | Interior only. All four neighbors are path. A 2-wide tube has no fill cell. |
+| North edge | GG/DD | `(22, 0)` | Grass on the north. |
+| South edge | DD/GG | `(22, 2)` | Grass on the south. |
+| West edge | GD/GD | `(21, 1)` | Grass on the west. |
+| East edge | DG/DG | `(23, 1)` | Grass on the east. |
+| NW cap | GG/GD | `(21, 0)` | Dirt only in the SE quadrant. North cell of a west end. |
+| NE cap | GG/DG | `(23, 0)` | Dirt only in the SW quadrant. North cell of an east end. |
+| SW corner | GD/GG | `(21, 2)` | Dirt only in the NE quadrant. South cell of a west end. |
+| SE corner | DG/GG | `(23, 2)` | Dirt only in the NW quadrant. South cell of an east end. |
+| Inner NW | GD/DD | `(23, 5)` | Grass only in the NW quadrant. Inside crotch of a bend. |
+| Inner NE | DG/DD | `(21, 5)` | Grass only in the NE quadrant. |
+| Inner SW | DD/GD | `(23, 3)` | Grass only in the SW quadrant. |
+| Inner SE | DD/DG | `(21, 3)` | Grass only in the SE quadrant. |
+
+Neighbor bits: N=1, E=2, S=4, W=8. A set bit means that neighbor is
+path. Fill is mask 15 only. A cell with two or more grass neighbors
+is never fill.
+
+## Dirt path — rounded ends
+
+1. Draw one 4-connected polyline on walkable grass. No 1-tile jog.
+2. If the run is at least 4 tiles, add a south cell under every
+   centerline cell, including both ends. Both rows occupy the same
+   columns. Drop any path cell outside that span.
+3. Autotile from the table.
+4. Force the end columns. Do not leave this to the mask. Do not add
+   a third cell beside the stack.
+
+```
+West column:  (21, 0) over (21, 2)
+East column:  (23, 0) over (23, 2)
+```
+
+Failed patterns (do not repeat):
+
+- Fill `(22, 1)` on an end, or on any cell that touches grass on two
+  adjacent sides.
+- South row shorter or longer than the north row at either end.
+- 2-tall blunt end of two fill tiles.
+- One-tile jog, or a stair one cell east and one cell north.
+- New pixels. Only the atlas cells above.
+
+## Dirt path — 90° and approximate 45°
+
+Every cell is 4-connected. No diagonal neighbor is “connected.”
+Do not place fill along 45°. Do not slice tiles to fake a diagonal.
+
+90° = one 2×2 knuckle. Outer elbow = cap/outer cell (grass on the two
+lawn sides). Inner crotch = inner-bite cell. Never a 2×2 of fill.
+Force the knuckle after autotile; the mask will mark the inner cell
+as fill because all four neighbors are path.
+
+Approximate 45° = two 90° knuckles + a short riser. One lean per
+scene. Riser is 2–4 tiles of path *after* the first knuckle, not a
+1-tile jog. Past 6 tiles it reads as a second highway.
+
+Forest default lean (northeast toward the house), if that recipe
+keeps a house:
+
+```
+################
+################
+              ##
+              ##
+              ##########
+              ##########
+```
+
+Lower knuckle (east then north; outside lawn south and east):
+
+```
+inner (23, 5)     east edge (23, 1)
+south edge (22, 2)    outer (23, 2)
+```
+
+Upper knuckle (north then east; outside lawn north and west):
+
+```
+outer (21, 0)      north edge (22, 0)
+west edge (21, 1)      inner (21, 3)
+```
+
+Mirror knuckles for SE / NW / SW. Straight runs keep edge tiles from
+the table.
+
+## Pond, fences, cliffs, house
+
+Pond: one compact blob. Wave fill only where water has water on all
+four sides. Every water–lawn neighbor is a shore cell from the atlas
+water block (columns 44–46, rows 0–2). Four outer corners are convex
+shores. Optional 1–3 reeds on south/east shore. No 1-tile canals.
+
+Fences: default “height” for pastoral recipes. 4-connected rails,
+real corner GIDs, min run 3, C-shaped or closed yard. Collision on
+rails. Overlay on flat grass.
+
+Cliffs: only recipe E (Lookout). One blob ≥4 tiles in both axes.
+Cap on every high cell. Brown face only on the south silhouette.
+Corners at every turn. If any singleton face would remain, drop the
+plateau and use fences instead. Do not sprinkle cliff fragments on
+Pastoral / Crossroads / Garden maps.
+
+House: two objects.
+
+- `HOUSE_BODY` — walls, door, porch. Collision. Sort Y = doorstep.
+  Actor south of that line draws in front. Actor cannot walk through
+  the body.
+- `HOUSE_ROOF` — gables and overhang. No collision. Sort Y = eave.
+  Actor north of the house, in the roof’s X span, is hidden by the
+  roof only.
+
+Do not y-sort the cottage as one sprite.
+
+## Layout recipes
+
+Seed from `map_id`. Masks first, then autotile with the methods above.
+
+1. Fill lawn with quiet FLAT_GRASS (2–4 near greens, hashed). Never a
+   tuft icon on every cell.
+2. Place or lock a house on flat grass (omit on maps that have none).
+3. Path graph: 1 trunk + 0–2 branches. A* 4-connected on lawn. Widen
+   to 2 where a run is ≥4. Autotile, then force caps and knuckles.
+   A rise toward a POI uses the approx-45° riser.
+4. Pond 0 or 1, off the path, ≥3×3 interior after shrink. Discard
+   tetromino lakes.
+5. Fence yard *or* one legal plateau, not both on a small map.
+6. Poisson trees, gap 5–6 tiles, 3–6 on a screen, not on path/water.
+7. Deco on ~6–10% of lawn cells (up to ~12% near path and house).
+   No lattice.
+
+Recipes (max two extras besides the trunk path):
+
+- A Pastoral — pond + fence yard + house + path (current forest vibe)
+- B Crossroads — two path trunks, 90° knuckles, no pond
+- C Pond walk — path skirts the shore; shore stays complete
+- D Garden — fence rectangle + gate on the path; no cliffs
+- E Lookout — one legal plateau; no fences
+
+Current `forest.tscn` is recipe A. `garden.tscn` is recipe D: a closed
+wood fence, a 2-tile gate on the riser, no pond and no cliffs. A new
+Painted Lands seed may pick another recipe. Do not apply A–E to
+Mystic Woods maps.
+
+Reject a Painted Lands screenshot if: lawn is a motif stamp; fill sits
+on a cap or knuckle; pond corners are square wave tiles; a cliff
+fragment is orphaned; the actor draws through `HOUSE_BODY`; a 1-tile
+stair fakes 45°.
