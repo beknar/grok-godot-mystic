@@ -72,11 +72,76 @@ Its sheet is `assets/ai/characters/red-fighter-16x16.png`, also 16×16
 cells in the same ten-row order. The heath scene does not control any
 character. `Lineup` places all five sheets 72px apart on one foot line.
 `scenes/forest/forest.tscn` is the sixth map, seed `91003`. It uses
-The Painted Lands brighter forest sheet, not Mystic Woods. Same pipeline: noise,
-thresholds, smooth, carve a dirt path, re-autotile, scatter trees.
-`character_sprite_sheet.png` is 3 columns by 4 rows of 32px, all
-facing the camera. Row 0 idles, row 1 walks. There is no attack row.
-Movement is still eight-direction.
+`assets/pack/TILESET_brighter.png` (The Painted Lands), not Mystic Woods.
+Lawn, pond, and fence are separate systems. The dirt path follows the
+procedure below. `character_sprite_sheet.png` is 3 columns by 4 rows of
+32px, all facing the camera. Row 0 idles, row 1 walks. There is no
+attack row. Movement is still eight-direction.
+
+## Painted Lands dirt path (rounded ends)
+
+Sheet: `assets/pack/TILESET_brighter.png`, 16×16 cells. Code:
+`scripts/forest_terrain.gd` (`_lay_path`, `_widen_run`, `_path_gid`).
+Do this only for that sheet. Leave the flat grass fill, the 5×3 pond
+strip (columns 44–46, rows 0–2), and the fence kit alone.
+
+Classify a sand cell by its four 8×8 quadrants, written NW NE / SW SE.
+G means that quadrant is grass. D means dirt.
+
+| Role | Quadrants | Atlas cell | Use |
+|---|---|---|---|
+| Fill | DD/DD | `(22, 1)` | Interior only. All four neighbors are path. |
+| North edge | GG/DD | `(22, 0)` | Grass on the north. North row of a 2-wide run, and a 1-wide east-west run. |
+| South edge | DD/GG | `(22, 2)` | Grass on the south. South row of a 2-wide run. |
+| West edge | GD/GD | `(21, 1)` | Grass on the west. |
+| East edge | DG/DG | `(23, 1)` | Grass on the east. |
+| NW cap | GG/GD | `(21, 0)` | Dirt only in the SE quadrant. North cell of the west end column. |
+| NE cap | GG/DG | `(23, 0)` | Dirt only in the SW quadrant. North cell of the east end column. |
+| SW corner | GD/GG | `(21, 2)` | Dirt only in the NE quadrant. South cell of the west end column. |
+| SE corner | DG/GG | `(23, 2)` | Dirt only in the NW quadrant. South cell of the east end column. |
+
+Neighbor bits when choosing a GID: N=1, E=2, S=4, W=8. A set bit means
+that neighbor is also path. Fill is mask 15 only. A cell with two or
+more grass neighbors is never fill.
+
+Procedure that produced the rounded ends:
+
+1. Draw one 4-connected east-west polyline on walkable grass. On this
+   sheet a vertical step opens a gap between the rounded pieces, so the
+   working ribbon does not jog up or down.
+2. If the run is at least 4 tiles, add a south cell under every
+   centerline cell, including both ends. The south row then occupies
+   the same columns as the north row. Drop any path cell outside that
+   column span or outside those two rows.
+3. Autotile every path cell from the mask above.
+4. After autotile, force the two end columns. Do not leave this to the
+   mask, and do not add a third cell beside the stack.
+
+```
+West column:  (21, 0) over (21, 2)
+East column:  (23, 0) over (23, 2)
+```
+
+The north cell is the same rounded dirt-on-grass cap already used for
+the top of the path. The south cell is that cap mirrored down: grass
+toward the south and toward the outside of the road. Both rows stop in
+that column. Nothing sits past it, and nothing hangs south of it.
+
+What failed, and must not be repeated:
+
+- Path fill `(22, 1)` on an end, or on any cell that touches grass on
+  two adjacent sides. The end reads as a square cobble tooth.
+- A south row that starts or ends one column inside the north row.
+  That is an L: the extra south cell stays square, and a cap placed
+  beside the stack comes back as an orphan tile.
+- A 2-tile-tall blunt end (two fill tiles side by side).
+- A vertical step or a one-tile jog. The sand edges connect east-west.
+  They do not meet across a north-south join, so the ribbon breaks.
+- Drawing a new rounded pixel. Only these sheet cells.
+
+Accept when both ends show grass eating the outer corner on the top
+and on the bottom, the long edges show the sheet's grass fringe, and
+no path cell past the end columns remains.
 
 ## Art directories
 
