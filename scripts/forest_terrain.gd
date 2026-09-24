@@ -79,32 +79,43 @@ func _lawn() -> void:
 
 
 func _lay_path() -> int:
-	# This sheet's rounded dirt pieces connect east-west. A vertical step opens a gap,
-	# so the ribbon stays one tile tall and shifts only by swapping to the south edge
-	# tile on a straight, which still reads as one path.
-	var y := house.y + 5
-	var pts: Array[Vector2i] = []
-	for x in range(2, house.x + 1):
-		pts.append(Vector2i(x, y))
-	for p in pts:
-		_path[_key(p.x, p.y)] = true
-	_widen_straights(pts)
-	_trim_to_centerline(pts)
-	for key in _path.keys():
-		var xy := _from_key(int(key))
-		_biome[_i(xy.x, xy.y)] = DIRT
-		var tile := _path_gid(xy.x, xy.y)
-		var i := _i(xy.x, xy.y)
-		_feat[i] = 2
-		_fax[i] = tile.x
-		_fay[i] = tile.y
-	if pts.size() >= 4:
-		# End columns are two cells tall, same x. No cap sitting beside the stack.
-		_set_path_tile(pts[0], Vector2i(21, 0))
-		_set_path_tile(Vector2i(pts[0].x, pts[0].y + 1), Vector2i(21, 2))
-		_set_path_tile(pts[pts.size() - 1], Vector2i(23, 0))
-		_set_path_tile(Vector2i(pts[pts.size() - 1].x, pts[pts.size() - 1].y + 1), Vector2i(23, 2))
+	# East-west ribbon on the same two rows as before, then one 90° turn
+	# north toward the yard. Both legs stay 2 wide and flush at each end.
+	# The old east cap was house.x. The knuckle sits 6 tiles west of it.
+	var north_y := house.y + 5
+	var south_y := north_y + 1
+	var west_x := 2
+	var kx := house.x - 6
+	var y_top := north_y - 6
+	for x in range(west_x, kx + 1):
+		_add_path(x, north_y)
+		_add_path(x, south_y)
+	for y in range(y_top, north_y):
+		_add_path(kx - 1, y)
+		_add_path(kx, y)
+	for x in range(west_x + 1, kx):
+		_set_path_tile(Vector2i(x, north_y), Vector2i(22, 0))
+		_set_path_tile(Vector2i(x, south_y), Vector2i(22, 2))
+	for y in range(y_top + 1, north_y):
+		_set_path_tile(Vector2i(kx - 1, y), Vector2i(21, 1))
+		_set_path_tile(Vector2i(kx, y), Vector2i(23, 1))
+	# West end, two cells in one column.
+	_set_path_tile(Vector2i(west_x, north_y), Vector2i(21, 0))
+	_set_path_tile(Vector2i(west_x, south_y), Vector2i(21, 2))
+	# North end, two cells in one row.
+	_set_path_tile(Vector2i(kx - 1, y_top), Vector2i(21, 0))
+	_set_path_tile(Vector2i(kx, y_top), Vector2i(23, 0))
+	# Knuckle. Outer elbow is the SE cell. Inner crotch is not fill.
+	_set_path_tile(Vector2i(kx - 1, south_y), Vector2i(22, 2))
+	_set_path_tile(Vector2i(kx, south_y), Vector2i(23, 2))
+	_set_path_tile(Vector2i(kx, north_y), Vector2i(23, 1))
+	_set_path_tile(Vector2i(kx - 1, north_y), Vector2i(23, 5))
 	return _path.size()
+
+
+func _add_path(x: int, y: int) -> void:
+	_path[_key(x, y)] = true
+	_biome[_i(x, y)] = DIRT
 
 
 func _trim_to_centerline(pts: Array[Vector2i]) -> void:
