@@ -79,37 +79,46 @@ func _lawn() -> void:
 
 
 func _lay_path() -> int:
-	# East-west ribbon on the same two rows as before, then one 90° turn
-	# north toward the yard. Both legs stay 2 wide and flush at each end.
-	# The old east cap was house.x. The knuckle sits 6 tiles west of it.
-	var north_y := house.y + 5
-	var south_y := north_y + 1
+	# Long east, a 2-tile north riser, then long east toward the house.
+	# Both bends are the proven 2×2 knuckle. No 1-tile stair.
+	var low_n := house.y + 5
+	var low_s := low_n + 1
+	var high_n := low_n - 2
+	var high_s := low_n - 1
 	var west_x := 2
-	var kx := house.x - 6
-	var y_top := north_y - 6
+	var east_x := house.x
+	var kx := east_x - 6
 	for x in range(west_x, kx + 1):
-		_add_path(x, north_y)
-		_add_path(x, south_y)
-	for y in range(y_top, north_y):
+		_add_path(x, low_n)
+		_add_path(x, low_s)
+	for y in range(high_n, low_n):
 		_add_path(kx - 1, y)
 		_add_path(kx, y)
+	for x in range(kx, east_x + 1):
+		_add_path(x, high_n)
+		_add_path(x, high_s)
 	for x in range(west_x + 1, kx):
-		_set_path_tile(Vector2i(x, north_y), Vector2i(22, 0))
-		_set_path_tile(Vector2i(x, south_y), Vector2i(22, 2))
-	for y in range(y_top + 1, north_y):
-		_set_path_tile(Vector2i(kx - 1, y), Vector2i(21, 1))
-		_set_path_tile(Vector2i(kx, y), Vector2i(23, 1))
-	# West end, two cells in one column.
-	_set_path_tile(Vector2i(west_x, north_y), Vector2i(21, 0))
-	_set_path_tile(Vector2i(west_x, south_y), Vector2i(21, 2))
-	# North end, two cells in one row.
-	_set_path_tile(Vector2i(kx - 1, y_top), Vector2i(21, 0))
-	_set_path_tile(Vector2i(kx, y_top), Vector2i(23, 0))
-	# Knuckle. Outer elbow is the SE cell. Inner crotch is not fill.
-	_set_path_tile(Vector2i(kx - 1, south_y), Vector2i(22, 2))
-	_set_path_tile(Vector2i(kx, south_y), Vector2i(23, 2))
-	_set_path_tile(Vector2i(kx, north_y), Vector2i(23, 1))
-	_set_path_tile(Vector2i(kx - 1, north_y), Vector2i(23, 5))
+		_set_path_tile(Vector2i(x, low_n), Vector2i(22, 0))
+		_set_path_tile(Vector2i(x, low_s), Vector2i(22, 2))
+	for x in range(kx + 1, east_x):
+		_set_path_tile(Vector2i(x, high_n), Vector2i(22, 0))
+		_set_path_tile(Vector2i(x, high_s), Vector2i(22, 2))
+	# West cap, two cells in one column.
+	_set_path_tile(Vector2i(west_x, low_n), Vector2i(21, 0))
+	_set_path_tile(Vector2i(west_x, low_s), Vector2i(21, 2))
+	# East cap, two cells in one column.
+	_set_path_tile(Vector2i(east_x, high_n), Vector2i(23, 0))
+	_set_path_tile(Vector2i(east_x, high_s), Vector2i(23, 2))
+	# Lower knuckle: east then north. Outer SE, inner NW bite.
+	_set_path_tile(Vector2i(kx - 1, low_s), Vector2i(22, 2))
+	_set_path_tile(Vector2i(kx, low_s), Vector2i(23, 2))
+	_set_path_tile(Vector2i(kx, low_n), Vector2i(23, 1))
+	_set_path_tile(Vector2i(kx - 1, low_n), Vector2i(23, 5))
+	# Upper knuckle: north then east. Outer NW, inner SE bite.
+	_set_path_tile(Vector2i(kx - 1, high_n), Vector2i(21, 0))
+	_set_path_tile(Vector2i(kx, high_n), Vector2i(22, 0))
+	_set_path_tile(Vector2i(kx - 1, high_s), Vector2i(21, 1))
+	_set_path_tile(Vector2i(kx, high_s), Vector2i(21, 3))
 	return _path.size()
 
 

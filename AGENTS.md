@@ -99,6 +99,10 @@ G means that quadrant is grass. D means dirt.
 | NE cap | GG/DG | `(23, 0)` | Dirt only in the SW quadrant. North cell of the east end column. |
 | SW corner | GD/GG | `(21, 2)` | Dirt only in the NE quadrant. South cell of the west end column. |
 | SE corner | DG/GG | `(23, 2)` | Dirt only in the NW quadrant. South cell of the east end column. |
+| Inner NW | GD/DD | `(23, 5)` | Grass only in the NW quadrant. Inside crotch of a bend. |
+| Inner NE | DG/DD | `(21, 5)` | Grass only in the NE quadrant. |
+| Inner SW | DD/GD | `(23, 3)` | Grass only in the SW quadrant. |
+| Inner SE | DD/DG | `(21, 3)` | Grass only in the SE quadrant. |
 
 Neighbor bits when choosing a GID: N=1, E=2, S=4, W=8. A set bit means
 that neighbor is also path. Fill is mask 15 only. A cell with two or
@@ -107,8 +111,9 @@ more grass neighbors is never fill.
 Procedure that produced the rounded ends:
 
 1. Draw one 4-connected east-west polyline on walkable grass. On this
-   sheet a vertical step opens a gap between the rounded pieces, so the
-   working ribbon does not jog up or down.
+   sheet a one-tile vertical step opens a gap between the rounded
+   pieces, so this ribbon does not jog. A 2-tile riser is the next
+   section, not a change to this one.
 2. If the run is at least 4 tiles, add a south cell under every
    centerline cell, including both ends. The south row then occupies
    the same columns as the north row. Drop any path cell outside that
@@ -135,13 +140,109 @@ What failed, and must not be repeated:
   That is an L: the extra south cell stays square, and a cap placed
   beside the stack comes back as an orphan tile.
 - A 2-tile-tall blunt end (two fill tiles side by side).
-- A vertical step or a one-tile jog. The sand edges connect east-west.
-  They do not meet across a north-south join, so the ribbon breaks.
+- A one-tile jog, or a stair that steps one cell east and one cell
+  north. Straight sand edges meet east-west. A single vertical shift
+  opens a gap. The only rise this sheet gets is the 2-tile riser in
+  the next section, and both of its bends are full 2×2 knuckles.
 - Drawing a new rounded pixel. Only these sheet cells.
 
 Accept when both ends show grass eating the outer corner on the top
 and on the bottom, the long edges show the sheet's grass fringe, and
 no path cell past the end columns remains.
+
+## Painted Lands dirt path (approximate 45°)
+
+Addition to the rounded-end ribbon above. Same sheet, same caps, same
+edge cells. One approximate diagonal per scene. The forest map aims
+northeast toward the house: long east, a 2-tile riser, long east again.
+Mirror the knuckles for a southeast, northwest, or southwest lean.
+Leave the lawn, the pond, the fence, and the house split alone.
+
+Every cell is 4-connected. No diagonal neighbor counts as connected.
+Do not place a line of fill along 45°, and do not split a cell into
+quarter tiles to fake that line.
+
+Three segments, each 2 tiles wide:
+
+1. Long west-to-east run, at least 8 tiles. On the forest map this is
+   the existing lower ribbon, rows `house.y + 5` and `house.y + 6`.
+2. Short northbound riser. Exactly 2 tiles of new road past the first
+   knuckle: the same two columns, two rows tall. Not a 1-tile jog.
+3. Long eastbound run, at least 6 tiles, on those two new rows. The
+   forest map ends it at `house.x` with the stacked east cap.
+
+```
+################
+################
+              ##
+              ##
+              ##########
+              ##########
+```
+
+Both rows of a horizontal leg stop on the same column. Both columns
+of the riser stop on the same row. Nothing hangs one cell past a cap
+or a knuckle.
+
+The forest riser is columns `house.x - 7` and `house.x - 6`. Call the
+west of those the inner column and the east one the outer column.
+`low_n` / `low_s` are the lower road. `high_n` / `high_s` are the two
+rows directly above `low_n`.
+
+Lower knuckle, east then north. Outside lawn is south and east.
+
+```
+inner (23, 5)     east edge (23, 1)
+south edge (22, 2)    outer (23, 2)
+```
+
+`(23, 5)` is the inside bite, grass only in the northwest. `(23, 2)`
+is the same rounded southeast cap as the east end of a flat road.
+
+Upper knuckle, north then east. Outside lawn is north and west.
+
+```
+outer (21, 0)      north edge (22, 0)
+west edge (21, 1)      inner (21, 3)
+```
+
+`(21, 0)` is the rounded northwest cap. `(21, 3)` is the inside bite,
+grass only in the southeast. East of the outer column, `high_n` stays
+the north edge `(22, 0)` and `high_s` stays the south edge `(22, 2)`.
+
+Straight runs keep the edge tiles from the table. Fill `(22, 1)` only
+on a cell with path on all four sides in the middle of a wider tube.
+A 2-wide road has no such cell. The inner-bite cells are never fill.
+
+Caps stay the stacked pairs already in use:
+
+```
+West end:  (21, 0) over (21, 2)
+East end:  (23, 0) over (23, 2)
+```
+
+Hard limits:
+
+- Never offset by one tile and then one tile. The rise past the
+  lower knuckle is at least 2 path tiles. On the forest map those two
+  rows are the upper knuckle, and the road turns east from there.
+  Prefer a riser of 2–4. Past 6 tiles the rise reads as a second road,
+  not a diagonal.
+- One step per scene. A second riser becomes a sawtooth.
+- Force both knuckles after any autotile. The mask will mark the
+  inner cell as fill because all four neighbors are path.
+
+What is still forbidden:
+
+- A stair of one cell east and one cell north.
+- Fill `(22, 1)` on either knuckle, or a 2×2 of fill at a bend.
+- Quarter tiles used as a diagonal split.
+- A new cliff, a new pond, or a moved house.
+
+Accept when each corner still reads as the rounded L, the outside
+elbow is a cap tile, the inside is one grass-bite tile, and the two
+bends plus the short riser lean the road toward the house. No
+sawtooth edge.
 
 ## Art directories
 
