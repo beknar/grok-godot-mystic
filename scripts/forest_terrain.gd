@@ -89,6 +89,7 @@ func _lay_path() -> int:
 	for p in pts:
 		_path[_key(p.x, p.y)] = true
 	_widen_straights(pts)
+	_trim_to_centerline(pts)
 	for key in _path.keys():
 		var xy := _from_key(int(key))
 		_biome[_i(xy.x, xy.y)] = DIRT
@@ -98,11 +99,27 @@ func _lay_path() -> int:
 		_fax[i] = tile.x
 		_fay[i] = tile.y
 	if pts.size() >= 4:
+		# End columns are two cells tall, same x. No cap sitting beside the stack.
 		_set_path_tile(pts[0], Vector2i(21, 0))
+		_set_path_tile(Vector2i(pts[0].x, pts[0].y + 1), Vector2i(21, 2))
 		_set_path_tile(pts[pts.size() - 1], Vector2i(23, 0))
-		_set_path_tile(Vector2i(pts[1].x, pts[1].y + 1), Vector2i(21, 2))
-		_set_path_tile(Vector2i(pts[pts.size() - 2].x, pts[pts.size() - 2].y + 1), Vector2i(23, 2))
+		_set_path_tile(Vector2i(pts[pts.size() - 1].x, pts[pts.size() - 1].y + 1), Vector2i(23, 2))
 	return _path.size()
+
+
+func _trim_to_centerline(pts: Array[Vector2i]) -> void:
+	if pts.is_empty():
+		return
+	var min_x := pts[0].x
+	var max_x := pts[pts.size() - 1].x
+	var y := pts[0].y
+	var drop: Array[int] = []
+	for key in _path.keys():
+		var xy := _from_key(int(key))
+		if xy.x < min_x or xy.x > max_x or xy.y < y or xy.y > y + 1:
+			drop.append(int(key))
+	for key in drop:
+		_path.erase(key)
 
 
 func _set_path_tile(p: Vector2i, tile: Vector2i) -> void:
@@ -126,9 +143,8 @@ func _widen_straights(pts: Array[Vector2i]) -> void:
 func _widen_run(run: Array[Vector2i]) -> void:
 	if run.size() < 4:
 		return
-	# Only the cap column stays one tile tall. The south cell beside
-	# each cap is the corner, not another fill stub.
-	for i in range(1, run.size() - 1):
+	# South row matches the north row, including the end columns.
+	for i in range(0, run.size()):
 		var p: Vector2i = run[i]
 		if _path.has(_key(p.x, p.y - 1)) or _path.has(_key(p.x, p.y + 1)):
 			continue
