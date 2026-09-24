@@ -6,7 +6,7 @@ or “done” checks.
 | Maps | Pack | Code | Rules in this file |
 |---|---|---|---|
 | clearing, grove, hollow, ford, heath | Mystic Woods: `plains.png`, `grass.png` under `assets/pack/` | `scripts/terrain.gd`, `scripts/clearing.gd` | § Mystic Woods |
-| forest, garden | Painted Lands: `assets/pack/TILESET_brighter.png` | `scripts/forest_terrain.gd`, `scripts/garden_terrain.gd` | § Painted Lands |
+| forest, garden, crossing | Painted Lands: `assets/pack/TILESET_brighter.png` | `scripts/forest_terrain.gd`, `scripts/garden_terrain.gd`, `scripts/crossing_terrain.gd` | § Painted Lands |
 
 `docs/scene-assembly.md` §0–5 is shared inventory. §6 is Painted Lands
 only. Mystic Woods generation detail stays in this file under
@@ -93,9 +93,12 @@ Painted Lands map (pipeline: § Painted Lands):
 - `scenes/forest/forest.tscn` — seed `91003` (not the heath generator),
   recipe A, `assets/pack/TILESET_brighter.png`.
 - `scenes/garden/garden.tscn` — seed `77241`, recipe D. Same sheet.
+- `scenes/crossing/crossing.tscn` — seed `33017`. A 2-wide cross,
+  two northeast steps, two fenced houses, two rounded dirt patches,
+  and one shore-edged pond. Same sheet.
   The walker is `character_sprite_sheet.png`, 3×4 of 32px (two tiles
   tall). Row 0 idles, row 1 walks. No attack row. Movement is still
-  eight-direction. Both scenes instance `scenes/forest/walker.tscn`.
+  eight-direction. These scenes instance `scenes/forest/walker.tscn`.
 
 There is no health, enemy, or save. The editor addon
 `addons/godot_mcp` is how this repo is driven from the Godot MCP server.
