@@ -16,6 +16,25 @@ const T_HIGH := 0.72
 const T_LOW := 0.34
 const T_WET := 0.38
 
+const HOUSES := [
+	Rect2(630, 241, 92, 76),
+	Rect2(622, 161, 100, 79),
+	Rect2(622, 321, 100, 78),
+	Rect2(630, 401, 92, 76),
+]
+const ROUND_PATCH := [Vector2i(24, 0), Vector2i(25, 0), Vector2i(26, 0), Vector2i(24, 1)]
+const IRREGULAR_PATCH := [Vector2i(24, 3), Vector2i(25, 3), Vector2i(26, 3), Vector2i(27, 3)]
+const BUSHES := [Vector2i(18, 0), Vector2i(19, 0), Vector2i(35, 24)]
+const LAND_ROCKS := [Vector2i(32, 6), Vector2i(28, 29)]
+const WATER_PLANTS := [Vector2i(47, 5), Vector2i(46, 5)]
+const WATER_ROCKS := [Vector2i(49, 7), Vector2i(49, 8)]
+const CAMPFIRE := Vector2i(29, 29)
+const TORCHES := [Vector2i(35, 26), Vector2i(36, 26)]
+const SIGNS := [
+	Vector2i(27, 23), Vector2i(27, 24), Vector2i(27, 25), Vector2i(27, 26),
+	Vector2i(27, 27), Vector2i(28, 23), Vector2i(28, 24), Vector2i(28, 25),
+]
+
 var _biome: PackedInt32Array
 var _grass: PackedInt32Array
 var _feat: PackedInt32Array
@@ -96,8 +115,10 @@ func generate() -> Dictionary:
 		_reeds()
 	if _want_plateau and _plateau_ok:
 		_cliff_autotile()
+	_lay_patches()
 	_flowers()
 	var props := _trees()
+	props.append_array(_recipe_props())
 	if _has_house:
 		props.append(_house_prop())
 	if _fence or _gate_only:
@@ -776,8 +797,327 @@ func _cliff_autotile() -> void:
 			_fay[i] = tile.y
 
 
+func _house_id() -> int:
+	match _rid:
+		0, 4, 9, 14, 19:
+			return 0
+		1, 6, 10, 15:
+			return 1
+		2, 7, 11, 16:
+			return 2
+		3, 8, 13, 17:
+			return 3
+		_:
+			return int(MAP_ID / 20) % 4
+
+
 func _house_prop() -> Dictionary:
-	return {"tile": house, "region": Rect2(630, 241, 92, 76), "body": Vector2(60, 14), "house": true}
+	var rect: Rect2 = HOUSES[_house_id()]
+	return {"tile": house, "region": rect, "body": Vector2(60, 14), "house": true}
+
+
+func _patch_plan() -> Array:
+	# [round_count, irregular_count]
+	match _rid:
+		0: return [3, 0]
+		1: return [0, 4]
+		2: return [2, 0]
+		3: return [2, 1]
+		4: return [0, 3]
+		5: return [6, 0]
+		6: return [2, 0]
+		7: return [0, 5]
+		8: return [2, 0]
+		9: return [0, 4]
+		10: return [2, 2]
+		11: return [3, 0]
+		12: return [0, 8]
+		13: return [2, 0]
+		14: return [2, 0]
+		15: return [0, 3]
+		16: return [0, 3]
+		17: return [2, 2]
+		18: return [0, 2]
+		_: return [2, 2]
+
+
+func _lay_patches() -> void:
+	var plan: Array = _patch_plan()
+	var round_n := int(plan[0])
+	var irreg_n := int(plan[1])
+	var origins := _patch_spots(round_n + irreg_n)
+	for i in origins.size():
+		var origin: Vector2i = origins[i]
+		var cells: Array[Vector2i] = _grow_irregular(origin) if i >= round_n else _grow_round(origin)
+		if cells.size() < 3:
+			continue
+		_paint_patch(cells, i >= round_n)
+
+
+func _grow_round(origin: Vector2i) -> Array[Vector2i]:
+	var wide := _hash2(origin.x, origin.y) > 0.5
+	var w := 3 if wide else 2
+	var cells: Array[Vector2i] = []
+	for y in 2:
+		for x in w:
+			var p := origin + Vector2i(x, y)
+			if _patch_ok(p.x, p.y):
+				cells.append(p)
+	if cells.size() < 3:
+		return []
+	return cells
+
+
+func _grow_irregular(origin: Vector2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for y in 2:
+		for x in 2:
+			var p := origin + Vector2i(x, y)
+			if _patch_ok(p.x, p.y):
+				cells.append(p)
+	if cells.size() < 3:
+		return []
+	var target := mini(7, 4 + int(_hash2(origin.x + 3, origin.y + 1) * 3.0))
+	var steps := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for _n in 12:
+		if cells.size() >= target:
+			break
+		var added := false
+		for c in cells:
+			for step in steps:
+				var dir: Vector2i = step
+				var nxt := c + dir
+				if not _patch_ok(nxt.x, nxt.y):
+					continue
+				var seen := false
+				for have in cells:
+					if have == nxt:
+						seen = true
+						break
+				if seen:
+					continue
+				if _blob_touch(cells, nxt) < 2 and cells.size() > 4:
+					continue
+				cells.append(nxt)
+				added = true
+				break
+			if added:
+				break
+		if not added:
+			break
+	return cells
+
+
+func _blob_touch(cells: Array[Vector2i], nxt: Vector2i) -> int:
+	var n := 0
+	for c in cells:
+		if absi(c.x - nxt.x) + absi(c.y - nxt.y) == 1:
+			n += 1
+	return n
+
+
+func _patch_ok(x: int, y: int) -> bool:
+	if not _inside(x, y) or x < 2 or y < 2 or x >= WIDTH - 2 or y >= HEIGHT - 2:
+		return false
+	if _biome[_i(x, y)] != GRASS:
+		return false
+	if _near_path(x, y, 3):
+		return false
+	if _has_house and absi(x - house.x) <= 2 and absi(y - house.y) <= 2:
+		return false
+	return true
+
+
+func _paint_patch(cells: Array[Vector2i], irregular: bool) -> void:
+	var have := {}
+	for c in cells:
+		have[_key(c.x, c.y)] = true
+	var ox := 24
+	var oy := 0
+	for c in cells:
+		var n := have.has(_key(c.x, c.y - 1))
+		var e := have.has(_key(c.x + 1, c.y))
+		var s := have.has(_key(c.x, c.y + 1))
+		var w := have.has(_key(c.x - 1, c.y))
+		var mask := (1 if n else 0) | (2 if e else 0) | (4 if s else 0) | (8 if w else 0)
+		var tile := Vector2i(ox + 1, oy)
+		match mask:
+			15:
+				tile = IRREGULAR_PATCH[c.x % IRREGULAR_PATCH.size()] if irregular else Vector2i(ox + 1, oy + 1)
+			14:
+				tile = Vector2i(ox + 1, oy)
+			13:
+				tile = Vector2i(ox + 2, oy + 1)
+			11:
+				tile = Vector2i(ox + 1, oy + 2)
+			7:
+				tile = Vector2i(ox, oy + 1)
+			6:
+				tile = Vector2i(ox, oy)
+			12:
+				tile = Vector2i(ox + 2, oy)
+			3:
+				tile = Vector2i(ox, oy + 2)
+			9:
+				tile = Vector2i(ox + 2, oy + 2)
+			4, 5:
+				tile = Vector2i(ox + 1, oy)
+			1:
+				tile = Vector2i(ox + 1, oy + 2)
+			2:
+				tile = Vector2i(ox, oy + 1)
+			8:
+				tile = Vector2i(ox + 2, oy + 1)
+			_:
+				tile = Vector2i(ox, oy)
+		var i := _i(c.x, c.y)
+		_biome[i] = DIRT
+		_feat[i] = 2
+		_fax[i] = tile.x
+		_fay[i] = tile.y
+
+
+func _patch_spots(limit: int) -> Array[Vector2i]:
+	var pts: Array[Vector2i] = []
+	if limit <= 0:
+		return pts
+	for _n in 80:
+		if pts.size() >= limit:
+			break
+		var x := _rng.randi_range(2, WIDTH - 3)
+		var y := _rng.randi_range(2, HEIGHT - 3)
+		if _biome[_i(x, y)] != GRASS:
+			continue
+		if _near_path(x, y, 3):
+			continue
+		var ok := true
+		for p in pts:
+			if absi(p.x - x) + absi(p.y - y) < 8:
+				ok = false
+				break
+		if ok:
+			pts.append(Vector2i(x, y))
+	return pts
+
+
+func _near_path(x: int, y: int, dist: int) -> bool:
+	for dy in range(-dist, dist + 1):
+		for dx in range(-dist, dist + 1):
+			if _path.has(_key(x + dx, y + dy)):
+				return true
+	return false
+
+
+func _prop_at(tile: Vector2i, gid: Vector2i, body: Vector2) -> Dictionary:
+	return {
+		"tile": tile,
+		"region": Rect2(gid.x * 16, gid.y * 16, 16, 16),
+		"body": body,
+	}
+
+
+func _free_lawn(avoid_house: bool) -> Vector2i:
+	for _n in 40:
+		var x := _rng.randi_range(3, WIDTH - 4)
+		var y := _rng.randi_range(3, HEIGHT - 4)
+		if _biome[_i(x, y)] != GRASS:
+			continue
+		if _near_path(x, y, 2):
+			continue
+		if avoid_house and _has_house and absi(x - house.x) <= 5 and absi(y - house.y) <= 5:
+			continue
+		return Vector2i(x, y)
+	return Vector2i(8, 8)
+
+
+func _recipe_props() -> Array:
+	var props: Array = []
+	var sign_n := 0
+	var bushes := false
+	var land := false
+	var land_block := false
+	var water_p := false
+	var water_r := false
+	var fire := false
+	var torches := false
+	match _rid:
+		0:
+			bushes = true; land = true; torches = true; sign_n = 1; water_p = true; water_r = true
+		1:
+			bushes = true; land = true; sign_n = 2
+		2:
+			bushes = true; sign_n = 1; water_p = true; water_r = true
+		3:
+			bushes = true; land = true; torches = true; sign_n = 2
+		4:
+			land = true; land_block = true; sign_n = 1
+		5:
+			bushes = true; land = true
+		6:
+			sign_n = 1; water_p = true; water_r = true
+		7:
+			bushes = true; fire = true; torches = true
+		8:
+			sign_n = 2; torches = true; water_p = true; water_r = true
+		9:
+			bushes = true; land = true; sign_n = 3
+		10:
+			fire = true; torches = true; sign_n = 2; water_p = true
+		11:
+			torches = true; sign_n = 1; bushes = true; water_r = true
+		12:
+			bushes = true; land = true; land_block = true
+		13:
+			bushes = true; sign_n = 1
+		14:
+			fire = true; torches = true; sign_n = 2; water_p = true; water_r = true
+		15:
+			land = true; sign_n = 1
+		16:
+			land = true; sign_n = 1; torches = true
+		17:
+			torches = true; sign_n = 2
+		18:
+			land = true
+		_:
+			bushes = true; fire = true; sign_n = 1
+	if bushes:
+		for i in 3:
+			props.append(_prop_at(_free_lawn(true), BUSHES[i % BUSHES.size()], Vector2(8, 4)))
+	if land:
+		var rock_body := Vector2(10, 6) if land_block else Vector2(2, 2)
+		props.append(_prop_at(_free_lawn(true), LAND_ROCKS[0], rock_body))
+		props.append(_prop_at(_free_lawn(true), LAND_ROCKS[1], rock_body))
+	if water_p and _count(WATER) > 0:
+		props.append_array(_water_props(WATER_PLANTS, 2, Vector2(2, 2)))
+	if water_r and _count(WATER) > 0:
+		props.append_array(_water_props(WATER_ROCKS, 2, Vector2(8, 4)))
+	if fire:
+		props.append(_prop_at(_free_lawn(true), CAMPFIRE, Vector2(10, 6)))
+	if torches:
+		var post := Vector2i(house.x - 2, house.y + 3) if _has_house else _free_lawn(false)
+		props.append(_prop_at(post, TORCHES[0], Vector2(2, 2)))
+		props.append(_prop_at(post + Vector2i(3, 0), TORCHES[1], Vector2(2, 2)))
+	for i in sign_n:
+		var gid: Vector2i = SIGNS[i % SIGNS.size()]
+		props.append(_prop_at(_free_lawn(true), gid, Vector2(2, 2)))
+	return props
+
+
+func _water_props(gids: Array, limit: int, body: Vector2) -> Array:
+	var props: Array = []
+	var found: Array[Vector2i] = []
+	for y in range(1, HEIGHT - 1):
+		for x in range(1, WIDTH - 1):
+			if _biome[_i(x, y)] != WATER:
+				continue
+			if _is(WATER, x, y + 1) and _is(WATER, x, y - 1):
+				continue
+			found.append(Vector2i(x, y))
+	for i in mini(limit, found.size()):
+		var gid: Vector2i = gids[i % gids.size()]
+		props.append(_prop_at(found[i * maxi(found.size() / limit, 1)], gid, body))
+	return props
 
 
 func _yard() -> Array:
