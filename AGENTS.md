@@ -97,8 +97,9 @@ Painted Lands map (pipeline: § Painted Lands):
   idles, row 1 walks. No attack row. Movement is still eight-direction.
   New forest seeds use `recipe = seed % 20` from the table below.
 - `scenes/wilds/wilds.tscn` — map id `74015`, recipe 15 Double lean.
-  House prefab 1. Two short rises. Irregular dirt islands are 3–8 cell
-  blobs autotiled with the patch set, plus a land rock and one sign.
+  House prefab 1. Two short rises. Irregular dirt blobs use the patch
+  atlas, then Mode A or B so the baked grass does not form a dark
+  rectangle. A land rock and one sign. Same sheet and walker.
 
 There is no health, enemy, or save. The editor addon
 `addons/godot_mcp` is how this repo is driven from the Godot MCP server.
@@ -272,6 +273,41 @@ Do not use PATH `(22,1)` or a lone 8×8 quadrant as the patch.
 
 Reject a square dirt tooth on the lawn.
 
+### Patch grass (the dark-green rectangle)
+
+PATCH atlas cells bake their *own* grass into the tile. That grass is
+a different green from FLAT_GRASS, so a raw stamp draws a dark square
+behind the dirt (the last screenshot). Never leave that AABB visible.
+
+After the blob is autotiled, pick **one paint mode per blob**
+(`(seed + blob_i) % 2`):
+
+**Mode A — match the lawn (default half).**  
+Keep beige / dirt / brown pixels. Replace every baked-grass pixel in
+the PATCH cells with the FLAT_GRASS pixel already on that world cell
+(same speckle variant). Equivalent: blit dirt with grass treated as
+transparent. The dirt outline stays rounded; the lawn color is
+continuous. No second green.
+
+**Mode B — accent grass, organic halo.**  
+Keep the baked darker green, but it may only exist inside an organic
+halo, never as the tile rectangle.
+
+1. Dirt mask = beige/brown pixels of the autotiled blob.
+2. Halo = that mask dilated 2–4 pixels with a 1-octave noise wobble
+   so the halo edge is lumpy, not a circle or a box. Then AND with
+   the 16px cells the blob occupies plus at most one neighbor ring.
+3. Darker grass is painted only on `halo minus dirt`. Outside the
+   halo, FLAT_GRASS stays.
+4. Soften the halo rim with the lawn speckle (copy 30–50% of rim
+   pixels from the destination FLAT_GRASS). No straight 16px edge of
+   dark green against light green.
+
+A 2×2 of PATCH tiles whose dark grass meets in a larger rectangle is
+a Mode B failure — run the halo mask or fall back to Mode A.
+
+Reject a dark-green square or rectangle under a dirt mound.
+
 ## Dirt path atlas (cobble PATH only)
 
 Classify a sand *path* cell by its four 8×8 quadrants, written
@@ -403,7 +439,8 @@ plateau_mask = CA(high); drop <40; keep only if recipe.plateau
 flatten spawn disk and each house disk
 path = A* 4-connected; widen 2; autotile PATH table; force caps
 patches = grow 3–8 cell blobs; autotile PATCH atlas (18–20 or 24–26);
-          never a lone square fill; min 3 tiles from cobble
+          Mode A or B grass paint; never a dark-green tile rectangle
+          or a lone square fill; min 3 tiles from cobble
 extras = fences/gate/plateau/pond per recipe
 props  = bushes, land rocks, water plants/rocks, campfire,
          torches, signs per recipe
@@ -453,5 +490,6 @@ Reject a Painted Lands screenshot if: lawn is a motif stamp; fill sits
 on a cap or knuckle; pond corners are square wave tiles; a cliff
 fragment is orphaned; the actor draws through `HOUSE_BODY`; a 1-tile
 stair fakes 45°; a PATCH cell is a square fill or a lone quadrant;
-two houses appear on a recipe that lists 0 or 1; land rocks sit in
+two houses appear on a recipe that lists 0 or 1; a PATCH sits on a
+dark-green square/rectangle of baked grass; land rocks sit in
 water or water rocks on lawn; a crate stands in for a sign.

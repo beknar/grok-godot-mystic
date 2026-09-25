@@ -97,6 +97,9 @@ Painted Lands only:
 - [ ] Each PATCH is a 3–8 cell blob autotiled with `(18–20, 0–2)` or
       `(24–26, 0–2)` corners/edges — no lone square fill, no lone 8×8
       quadrant
+- [ ] PATCH grass is Mode A (baked grass recolored to FLAT_GRASS) or
+      Mode B (darker grass only inside a noisy halo). No dark-green
+      rectangle under the dirt
 - [ ] Bushes / land rocks / water plants / water rocks / campfire / torches /
       signs match the recipe flags
 - [ ] Land rocks sit on lawn; water rocks sit on water or shore
@@ -117,10 +120,10 @@ Mystic Woods default cliff threshold `0.64` here.
 - GRASS_DECO — flowers/tufts. Not a substitute for bushes or rocks.
 - PATH_* — cobble `(21–23, *)` only. Fill `(22, 1)` is interior only.
 - PATCH_* — multi-cell dirt *islands*. Grow 3–8 cells, then autotile
-  with dirt-on-grass `(18–20, 0–2)` or `(24–26, 0–2)`:
-  NW `(18,0)` N `(19,0)` NE `(20,0)` / W `(18,1)` F `(19,1)` E `(20,1)` /
-  SW `(18,2)` S `(19,2)` SE `(20,2)`. Ragged row-3 tiles only as
-  interiors. Never a lone square or a lone quadrant.
+  with dirt-on-grass `(18–20, 0–2)` or `(24–26, 0–2)`. Then paint
+  grass: Mode A recolor baked green to FLAT_GRASS, or Mode B keep
+  darker green only inside a noise-wobbled halo. Never show the tile
+  AABB as a dark-green box. Ragged row-3 tiles only as interiors.
 - WATER_* — autotile source columns 44–46, rows 0–2. Then water plants
   and water rocks from the same cluster.
 - FENCE / GATE — recipe.
@@ -142,7 +145,8 @@ torches, house parts, characters).
 3. Pond / plateau candidates; drop specks; keep only if the recipe wants them.
 4. Flatten spawn + each house disk.
 5. A* cobble PATH; widen 2; force caps and knuckles.
-6. Grow PATCH blobs (3–8 cells); autotile PATCH atlas; no lone squares.
+6. Grow PATCH blobs (3–8 cells); autotile PATCH atlas; Mode A or B
+   grass paint; no lone squares; no dark-green tile rectangle.
 7. Fence / gate / plateau.
 8. Bushes, land rocks, water plants/rocks, campfire, torches, signs.
 9. Trees + flower deco.
@@ -151,9 +155,9 @@ torches, house parts, characters).
 ### Path vs patch
 
 Path = 4-connected cobble tube.
-Patch = small dirt blob whose **outline uses corner and edge tiles**
-so grass eats the corners. Same method as a tiny pond. Do not stamp
-one fill cell and call it a patch.
+Patch = small dirt blob, corner/edge autotile, then Mode A (lawn
+color) or Mode B (organic darker-grass halo). Do not stamp one fill
+cell. Do not leave the atlas tile’s dark-green square showing.
 
 ### Recipes 0–19
 
