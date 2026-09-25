@@ -6,15 +6,15 @@ or “done” checks.
 | Maps | Pack | Code | Rules in this file |
 |---|---|---|---|
 | clearing, grove, hollow, ford, heath | Mystic Woods: `plains.png`, `grass.png` under `assets/pack/` | `scripts/terrain.gd`, `scripts/clearing.gd` | § Mystic Woods |
-| forest, garden, crossing, wilds | Painted Lands: `assets/pack/TILESET_brighter.png` | `scripts/forest_terrain.gd`, `scripts/garden_terrain.gd`, `scripts/crossing_terrain.gd`, `scripts/wilds_terrain.gd` | § Painted Lands |
+| forest | Painted Lands: `assets/pack/TILESET_brighter.png` | `scripts/forest_terrain.gd` | § Painted Lands |
 
 `docs/scene-assembly.md` §0–5 is shared inventory. §6 is Painted Lands
-only. Mystic Woods generation detail stays in this file under
+only (20-recipe forest generator). Mystic Woods generation stays under
 § Mystic Woods.
 
-Heath and forest both use seed `91003`. That is coincidence. Heath
-still runs the Mystic Woods pipeline with `include_water` false.
-Forest never calls `terrain.gd`.
+Heath and forest both use seed `91003` on the current scenes. That is
+coincidence. Heath still runs the Mystic Woods pipeline with
+`include_water` false. Forest never calls `terrain.gd`.
 
 ## Scene assembly (backgrounds + playing field)
 
@@ -90,19 +90,14 @@ Mystic Woods maps (pipeline: § Mystic Woods):
 
 Painted Lands map (pipeline: § Painted Lands):
 
-- `scenes/forest/forest.tscn` — seed `91003` (not the heath generator),
-  recipe A, `assets/pack/TILESET_brighter.png`.
-- `scenes/garden/garden.tscn` — seed `77241`, recipe D. Same sheet.
-- `scenes/wilds/wilds.tscn` — map id `44119`. Recipe is chosen from
-  that id (this seed is C, pond walk). Height and moisture are masks.
-  The path is one 2-wide road from the west edge to the house, with
-  one short rise. Same sheet and walker.
-- `scenes/crossing/crossing.tscn` — seed `33017`. A 2-wide cross,
-  two northeast steps, two fenced houses, two rounded dirt patches,
-  and one shore-edged pond. Same sheet.
-  The walker is `character_sprite_sheet.png`, 3×4 of 32px (two tiles
-  tall). Row 0 idles, row 1 walks. No attack row. Movement is still
-  eight-direction. These scenes instance `scenes/forest/walker.tscn`.
+- `scenes/forest/forest.tscn` — current seed `91003` (not the heath
+  generator), `assets/pack/TILESET_brighter.png`.
+  `character_sprite_sheet.png` is 3×4 of 32px (two tiles tall). Row 0
+  idles, row 1 walks. No attack row. Movement is still eight-direction.
+  New forest seeds use `recipe = seed % 20` from the table below.
+- `scenes/wilds/wilds.tscn` — map id `74015`, recipe `74015 % 20` = 15
+  Double lean. Same sheet and the forest walker. No pond. One road
+  makes two short rises, separated by a straight run, and ends at the house.
 
 There is no health, enemy, or save. The editor addon
 `addons/godot_mcp` is how this repo is driven from the Godot MCP server.
@@ -204,24 +199,23 @@ Code: `scripts/forest_terrain.gd` (`_lay_path`, `_widen_run`, `_path_gid`).
 
 Two jobs, one sheet:
 
-1. **How dirt, water, fences, and the house draw** — the autotile
-   tables and y-sort split. These methods stay. Do not invent pixels
+1. **How dirt, water, fences, cliffs, and the house draw** — autotile
+   tables and y-sort. These methods never change. Do not invent pixels
    or swap in Mystic Woods dirt from `plains.png`.
-2. **Where those systems go on a seed** — § Layout recipes. Changing
-   a seed may add, omit, or move a pond, fence yard, path branch, or
-   (Lookout only) one plateau. That is not a regression of (1).
+2. **Where those systems go** — the 20-recipe generator below. A new
+   seed changes recipe, POIs, path graph, pond count, and extras.
+   That is not a regression of (1).
 
-“Leave the grass / pond / fence / house alone” means: do not restyle
-them and do not break their autotile. It does **not** freeze the
-current forest screenshot when the task is a new seed or recipe.
+Do not freeze the current `forest.tscn` screenshot when baking a new
+seed. Do not restyle the systems when editing one screenshot.
 
-The 5×3 block at atlas columns 44–46, rows 0–2 is the **water
-autotile source on the sheet**, not the size of the lake in the
-world. Do not stamp a 5×3 rectangle of wave fill as the pond.
+The 5×3 block at atlas columns 44–46, rows 0–2 is the **water autotile
+source on the sheet**, not the size of the lake in the world. Do not
+stamp a 5×3 rectangle of wave fill as the pond.
 
 Quadrant labels (NW NE / SW SE) describe how to *pick* a 16×16 atlas
-cell. They are not a license to slice that cell into four world
-tiles. Never split a cell to fake a 45° road.
+cell. Never slice that cell into four world tiles. Never split a cell
+to fake a 45° road.
 
 ## Dirt path atlas
 
@@ -252,8 +246,8 @@ is never fill.
 
 1. Draw one 4-connected polyline on walkable grass. No 1-tile jog.
 2. If the run is at least 4 tiles, add a south cell under every
-   centerline cell, including both ends. Both rows occupy the same
-   columns. Drop any path cell outside that span.
+   centerline cell (or a second column on a north–south run). Both
+   rows of a tube occupy the same columns. Drop cells outside that span.
 3. Autotile from the table.
 4. Force the end columns. Do not leave this to the mask. Do not add
    a third cell beside the stack.
@@ -261,13 +255,15 @@ is never fill.
 ```
 West column:  (21, 0) over (21, 2)
 East column:  (23, 0) over (23, 2)
+North-bound cap: (21, 0)/(23, 0) over the matching inner edges
+South-bound cap: (21, 2)/(23, 2) under the matching inner edges
 ```
 
 Failed patterns (do not repeat):
 
 - Fill `(22, 1)` on an end, or on any cell that touches grass on two
   adjacent sides.
-- South row shorter or longer than the north row at either end.
+- One row shorter than the other at an end or knuckle.
 - 2-tall blunt end of two fill tiles.
 - One-tile jog, or a stair one cell east and one cell north.
 - New pixels. Only the atlas cells above.
@@ -282,12 +278,12 @@ lawn sides). Inner crotch = inner-bite cell. Never a 2×2 of fill.
 Force the knuckle after autotile; the mask will mark the inner cell
 as fill because all four neighbors are path.
 
-Approximate 45° = two 90° knuckles + a short riser. One lean per
-scene. Riser is 2–4 tiles of path *after* the first knuckle, not a
-1-tile jog. Past 6 tiles it reads as a second highway.
+Approximate 45° = two 90° knuckles + a short riser. Riser is 2–4 tiles
+of path *after* the first knuckle, not a 1-tile jog. Past 6 tiles it
+reads as a second highway. Default cap is one lean per path leg, at
+most two leans on the whole map, never on adjacent cells.
 
-Forest default lean (northeast toward the house), if that recipe
-keeps a house:
+Example lean (east, north, east):
 
 ```
 ################
@@ -317,22 +313,23 @@ the table.
 
 ## Pond, fences, cliffs, house
 
-Pond: one compact blob. Wave fill only where water has water on all
-four sides. Every water–lawn neighbor is a shore cell from the atlas
-water block (columns 44–46, rows 0–2). Four outer corners are convex
+Pond: compact blob from moisture (see generator). Wave fill only where
+water has water on all four sides. Every water–lawn neighbor is a shore
+cell from atlas columns 44–46, rows 0–2. Four outer corners are convex
 shores. Optional 1–3 reeds on south/east shore. No 1-tile canals.
+World pond size is the blob, not 5×3.
 
-Fences: default “height” for pastoral recipes. 4-connected rails,
-real corner GIDs, min run 3, C-shaped or closed yard. Collision on
-rails. Overlay on flat grass.
+Fences: 4-connected rails, real corner GIDs, min run 3. Collision on
+rails. Overlay on flat grass. Shape comes from the recipe (yard, gate
+line, or omit).
 
-Cliffs: only recipe E (Lookout). One blob ≥4 tiles in both axes.
-Cap on every high cell. Brown face only on the south silhouette.
+Cliffs: only recipes that list a plateau. One blob ≥4 tiles in both
+axes. Cap on every high cell. Brown face only on the south silhouette.
 Corners at every turn. If any singleton face would remain, drop the
-plateau and use fences instead. Do not sprinkle cliff fragments on
-Pastoral / Crossroads / Garden maps.
+plateau and omit cliffs. Never sprinkle cliff fragments on a recipe
+that does not list a plateau.
 
-House: two objects.
+House: two objects when the recipe includes a house.
 
 - `HOUSE_BODY` — walls, door, porch. Collision. Sort Y = doorstep.
   Actor south of that line draws in front. Actor cannot walk through
@@ -343,35 +340,79 @@ House: two objects.
 
 Do not y-sort the cottage as one sprite.
 
-## Layout recipes
+## Forest generator (organic, 20 recipes)
 
-Seed from `map_id`. Masks first, then autotile with the methods above.
+Same loop as Mystic Woods (noise → blobs → drop specks → arenas →
+A* → scatter → verify) but **paint** only with this sheet. Do not use
+Mystic Woods cliff threshold `0.64` as a default biome here.
 
-1. Fill lawn with quiet FLAT_GRASS (2–4 near greens, hashed). Never a
-   tuft icon on every cell.
-2. Place or lock a house on flat grass (omit on maps that have none).
-3. Path graph: 1 trunk + 0–2 branches. A* 4-connected on lawn. Widen
-   to 2 where a run is ≥4. Autotile, then force caps and knuckles.
-   A rise toward a POI uses the approx-45° riser.
-4. Pond 0 or 1, off the path, ≥3×3 interior after shrink. Discard
-   tetromino lakes.
-5. Fence yard *or* one legal plateau, not both on a small map.
-6. Poisson trees, gap 5–6 tiles, 3–6 on a screen, not on path/water.
-7. Deco on ~6–10% of lawn cells (up to ~12% near path and house).
-   No lattice.
+```
+seed = map_id
+rng  = rng(seed)
+recipe = seed % 20
+height, moist = fBm(seed, 4 octaves)
+               height freq 0.055, moist freq 0.05 offset (40, 20)
+lawn = all cells
+pond_mask = CA(height < 0.34 and moist < 0.38)
+            drop components < 12 cells; drop tetrominoes
+plateau_mask = CA(height > 0.72) then erode
+               drop components < 40 cells
+               KEEP only if recipe.plateau else discard
+flatten spawn disk (r=5) and house disk (r=4) if recipe.house
+POIs = spawn, house (or map-center if no house),
+       optional second landmark from rng
+path = A* 4-connected lawn, cost 1; water/fence/body blocked
+       widen 2 if run ≥ 4
+       if recipe.lean: insert 2–4 tile riser + two knuckles
+       autotile table; force caps and knuckles
+apply recipe extras (ponds, fences, plateau, extra branches)
+Poisson trees (gap recipe.tree_gap), deco (recipe.deco)
+verify walk spawn → house-or-far-path-end
+reject if fill on cap/knuckle, square pond, orphan cliff,
+        actor would clip HOUSE_BODY, or 1-tile stair
+```
 
-Recipes (max two extras besides the trunk path):
+Successive seeds look different because `recipe`, POI cells, pond
+yes/no (from moisture), and branch count all change. Do not expect
+grass-hash alone to read as a new map.
 
-- A Pastoral — pond + fence yard + house + path (current forest vibe)
-- B Crossroads — two path trunks, 90° knuckles, no pond
-- C Pond walk — path skirts the shore; shore stays complete
-- D Garden — fence rectangle + gate on the path; no cliffs
-- E Lookout — one legal plateau; no fences
+### Recipe table (`recipe = seed % 20`)
 
-Current `forest.tscn` is recipe A. `garden.tscn` is recipe D: a closed
-wood fence, a 2-tile gate on the riser, no pond and no cliffs. A new
-Painted Lands seed may pick another recipe. Do not apply A–E to
-Mystic Woods maps.
+Flags: H house, P pond (keep largest valid blob; P2 = keep two if
+two valid components exist), F fence yard, G gate line across the
+path (no full yard), C plateau, T tree count band, L allow one
+approx-45° lean, B extra A* branches, D deco density.
+
+| # | Name | H | Water | Height | Path | Trees | Deco |
+|---|---|---|---|---|---|---|---|
+| 0 | Pastoral | yes | P | F | 1 trunk + L toward house | 3–6, gap 5–6 | 8% |
+| 1 | Crossroads | yes | none | none | 2 trunks, 90° only | 3–6 | 8% |
+| 2 | Pond walk | yes | P | none | trunk skirts shore (≥1 tile lawn) | 3–6 | 8% |
+| 3 | Garden | yes | none | F + G | 1 trunk through gate | 3–5 | 10% near fence |
+| 4 | Lookout | yes | none | C | trunk to plateau foot, L ok | 3–5 | 6% |
+| 5 | Open meadow | no | none | none | 1 long edge-to-edge trunk | 2–4 | 12% flowers |
+| 6 | Twin water | yes | P2 | none | trunk between the two blobs | 3–6 | 8% |
+| 7 | South road | yes N | none | none | trunk locked to south third | 3–6 | 8% |
+| 8 | Shore spur | yes | P | none | trunk + B=1 ending 1 cell off shore | 3–6 | 8% |
+| 9 | Three-way | yes | none | none | trunk + B=2, 90° only | 3–6 | 7% |
+| 10 | West hamlet | yes W | P | F | from east edge, L toward house | 3–6 | 8% |
+| 11 | East hamlet | yes E | P | F | from west edge, L toward house | 3–6 | 8% |
+| 12 | Wild lane | no | moisture only | none | 1 trunk, no extras | 4–7 | 6% |
+| 13 | Orchard | yes | none | none | short trunk from nearest edge | 8–12, gap 4 | 5% |
+| 14 | Shore hamlet | yes | P next to house | F between house and pond | short trunk | 3–5 | 9% |
+| 15 | Double lean | yes | none | none | one trunk, two L (not adjacent) | 3–6 | 8% |
+| 16 | Below the rim | yes | none | C | trunk in the lawn south of plateau | 3–5 | 6% |
+| 17 | Gate road | yes | none | G only | trunk through a 3–5 tile gate | 3–6 | 8% |
+| 18 | Sparse wild | no | P if blob exists else none | none | 1 trunk | 2–3, gap 7 | 4% |
+| 19 | Switchback | yes | none | none | U of two 90° knuckles back to same edge | 3–6 | 8% |
+
+Recipe 0 is the current `forest.tscn` vibe. Recipes 4 and 16 are the
+only plateau maps. Recipes 5, 12, 18 have no house — skip body/roof
+objects and sort checks.
+
+If a flag cannot be placed without breaking autotile (pond too small,
+plateau fails the blob test), drop that extra and keep the path.
+Do not invent tiles to force the flag.
 
 Reject a Painted Lands screenshot if: lawn is a motif stamp; fill sits
 on a cap or knuckle; pond corners are square wave tiles; a cliff

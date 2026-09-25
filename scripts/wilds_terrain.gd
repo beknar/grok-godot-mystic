@@ -1,9 +1,9 @@
 extends RefCounted
 
-# Organic Painted Lands map. seed = map_id. Recipe A–E is a visible fork.
-# Height and moisture are masks only. Tiles come from TILESET_brighter.png.
+# Painted Lands wilds. seed = map_id. recipe = seed % 20.
+# Paint is TILESET_brighter.png only. Thresholds are not the Mystic Woods ones.
 
-const MAP_ID := 44119
+const MAP_ID := 74015
 const WIDTH := 60
 const HEIGHT := 42
 
@@ -12,9 +12,9 @@ const DIRT := 1
 const HIGH := 2
 const WATER := 3
 
-const T_HIGH := 0.70
-const T_LOW := 0.40
-const T_WET := 0.45
+const T_HIGH := 0.72
+const T_LOW := 0.34
+const T_WET := 0.38
 
 var _biome: PackedInt32Array
 var _grass: PackedInt32Array
@@ -24,26 +24,34 @@ var _fay: PackedInt32Array
 var _deco: PackedInt32Array
 var _path: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
-var recipe := "A"
-var spawn := Vector2i(4, 28)
-var house := Vector2i(48, 20)
-var door := Vector2i(46, 26)
+var _rid := 0
+var _has_house := true
+var _pond_keep := 0
+var _fence := false
+var _gate_only := false
+var _want_plateau := false
 var _plateau_ok := false
 var _plat: Array = [0, 0, 0, 0]
-var _keep_pond := false
-var _use_fence := false
-var _use_rise := false
-var _second_trunk := false
-var _gate := false
-var _low_n := 0
+var _deco_p := 0.08
+var _tree_min := 3
+var _tree_max := 6
+var _tree_gap := 6.0
+var _near_fence := false
+var spawn := Vector2i(4, 28)
+var house := Vector2i(30, 16)
+var door := Vector2i(30, 22)
+var _low_n := 28
 var _rise := 0
-var _knuckle := 0
-var _east_x := 0
+var _knuckle := 24
+var _east_x := 46
+var _west_x := 3
 var report := ""
 
 
 func generate() -> Dictionary:
 	_rng.seed = MAP_ID
+	_rid = posmod(MAP_ID, 20)
+	_read_recipe()
 	var n := WIDTH * HEIGHT
 	_biome = PackedInt32Array()
 	_biome.resize(n)
@@ -60,103 +68,156 @@ func generate() -> Dictionary:
 	_deco.fill(-1)
 	_path.clear()
 	_lawn()
-	recipe = _pick_recipe()
-	_apply_recipe_flags()
-	if recipe == "E":
-		_mask_high()
-		_cellular(HIGH)
-		_erode(HIGH)
-		_cull_high()
 	_mask_pond()
 	_cellular(WATER)
 	_erode(WATER)
-	_cull_pond()
+	_cull_kind(WATER, 12, true)
 	_open_pond()
+	if _want_plateau:
+		_mask_high()
+		_cellular(HIGH)
+		_erode(HIGH)
+		_cull_kind(HIGH, 40, false)
+		_keep_plateau_rect()
+	else:
+		_clear_kind(HIGH)
 	_place_anchors()
 	_flatten(spawn.x, spawn.y, 5)
-	_flatten(house.x, house.y, 4)
-	if not _keep_pond:
-		_delete_pond()
+	if _has_house:
+		_flatten(house.x, house.y, 4)
+	if _pond_keep == 0:
+		_clear_kind(WATER)
 	var route := _astar(spawn, door)
 	_lay_path(route)
 	_autotile_path()
-	_force_ends_and_knuckles()
-	_flowers()
-	if _keep_pond:
+	_force_geometry()
+	if _pond_keep > 0:
 		_shore_pond()
 		_reeds()
-	if recipe == "E" and _plateau_ok:
+	if _want_plateau and _plateau_ok:
 		_cliff_autotile()
-	elif recipe == "E":
-		_use_fence = true
+	_flowers()
 	var props := _trees()
-	props.append(_house_prop())
-	if _use_fence:
+	if _has_house:
+		props.append(_house_prop())
+	if _fence or _gate_only:
 		props.append_array(_yard())
-	var reached := _reaches(spawn, door)
-	var rim_fill := _fill_on_rim()
-	report = "wilds map=%d recipe=%s grass=%d dirt=%d high=%d water=%d path=%d props=%d reached=%s rim_fill=%d plateau=%s" % [
-		MAP_ID, recipe, _count(GRASS), _count(DIRT), _count(HIGH), _count(WATER),
-		_path.size(), props.size(), str(reached), rim_fill, str(_plateau_ok),
+	var goal := door if _has_house else Vector2i(_east_x, _low_n)
+	var reached := _reaches(spawn, goal)
+	report = "wilds map=%d recipe=%d %s water=%d high=%d path=%d props=%d reached=%s rim_fill=%d plateau=%s" % [
+		MAP_ID, _rid, _recipe_name(), _count(WATER), _count(HIGH), _path.size(),
+		props.size(), str(reached), _fill_on_rim(), str(_plateau_ok),
 	]
 	return {
-		"width": WIDTH,
-		"height": HEIGHT,
-		"grass": _grass,
-		"feat": _feat,
-		"fax": _fax,
-		"fay": _fay,
-		"deco": _deco,
-		"biome": _biome,
-		"spawn": spawn,
-		"props": props,
-		"report": report,
+		"width": WIDTH, "height": HEIGHT,
+		"grass": _grass, "feat": _feat, "fax": _fax, "fay": _fay,
+		"deco": _deco, "biome": _biome, "spawn": spawn,
+		"props": props, "report": report,
 	}
 
 
-func _pick_recipe() -> String:
-	var n := (MAP_ID * 1103515245 + 12345) & 0x7fffffff
-	match n % 5:
+func _recipe_name() -> String:
+	match _rid:
+		0: return "Pastoral"
+		1: return "Crossroads"
+		2: return "PondWalk"
+		3: return "Garden"
+		4: return "Lookout"
+		5: return "OpenMeadow"
+		6: return "TwinWater"
+		7: return "SouthRoad"
+		8: return "ShoreSpur"
+		9: return "ThreeWay"
+		10: return "WestHamlet"
+		11: return "EastHamlet"
+		12: return "WildLane"
+		13: return "Orchard"
+		14: return "ShoreHamlet"
+		15: return "DoubleLean"
+		16: return "BelowRim"
+		17: return "GateRoad"
+		18: return "SparseWild"
+		_: return "Switchback"
+
+
+func _read_recipe() -> void:
+	_has_house = true
+	_pond_keep = 0
+	_fence = false
+	_gate_only = false
+	_want_plateau = false
+	_deco_p = 0.08
+	_tree_min = 3
+	_tree_max = 6
+	_tree_gap = 6.0
+	_near_fence = false
+	match _rid:
 		0:
-			return "A"
+			_pond_keep = 1
+			_fence = true
 		1:
-			return "B"
+			pass
 		2:
-			return "C"
+			_pond_keep = 1
 		3:
-			return "D"
+			_fence = true
+			_gate_only = false
+			_near_fence = true
+			_deco_p = 0.10
+			_tree_max = 5
+		4:
+			_want_plateau = true
+			_tree_max = 5
+			_deco_p = 0.06
+		5:
+			_has_house = false
+			_tree_min = 2
+			_tree_max = 4
+			_deco_p = 0.12
+		6:
+			_pond_keep = 2
+		7:
+			pass
+		8:
+			_pond_keep = 1
+		9:
+			_deco_p = 0.07
+		10, 11:
+			_pond_keep = 1
+			_fence = true
+		12:
+			_has_house = false
+			_pond_keep = 1
+			_tree_min = 4
+			_tree_max = 7
+			_deco_p = 0.06
+		13:
+			_tree_min = 8
+			_tree_max = 12
+			_tree_gap = 4.0
+			_deco_p = 0.05
+		14:
+			_pond_keep = 1
+			_fence = true
+			_tree_max = 5
+			_deco_p = 0.09
+		15:
+			pass
+		16:
+			_want_plateau = true
+			_tree_max = 5
+			_deco_p = 0.06
+		17:
+			_gate_only = true
+		18:
+			_has_house = false
+			_pond_keep = 1
+			_tree_min = 2
+			_tree_max = 3
+			_tree_gap = 7.0
+			_deco_p = 0.04
 		_:
-			return "E"
-
-
-func _apply_recipe_flags() -> void:
-	match recipe:
-		"A":
-			_keep_pond = true
-			_use_fence = true
-			_use_rise = true
-		"B":
-			_keep_pond = false
-			_use_fence = false
-			_use_rise = false
-			_second_trunk = true
-		"C":
-			_keep_pond = true
-			_use_fence = false
-			_use_rise = true
-		"D":
-			_keep_pond = false
-			_use_fence = true
-			_use_rise = true
-			_gate = true
-		"E":
-			_keep_pond = false
-			_use_fence = false
-			_use_rise = true
-		_:
-			_keep_pond = true
-			_use_fence = true
-			_use_rise = true
+			pass
 
 
 func _lawn() -> void:
@@ -168,22 +229,22 @@ func _lawn() -> void:
 			_grass[_i(x, y)] = g.x
 
 
-func _mask_high() -> void:
-	for y in HEIGHT:
-		for x in WIDTH:
-			if _fbm(x * 0.05, y * 0.05) > T_HIGH:
-				_biome[_i(x, y)] = HIGH
-
-
 func _mask_pond() -> void:
 	for y in range(2, HEIGHT - 2):
 		for x in range(2, WIDTH - 2):
-			if _biome[_i(x, y)] == HIGH:
-				continue
-			var h := _fbm(x * 0.06, y * 0.06)
+			var h := _fbm(x * 0.055, y * 0.055)
 			var m := _fbm(x * 0.05 + 40.0, y * 0.05 + 20.0)
 			if h < T_LOW and m < T_WET:
 				_biome[_i(x, y)] = WATER
+
+
+func _mask_high() -> void:
+	for y in range(2, HEIGHT - 2):
+		for x in range(2, WIDTH - 2):
+			if _biome[_i(x, y)] == WATER:
+				continue
+			if _fbm(x * 0.055, y * 0.055) > T_HIGH:
+				_biome[_i(x, y)] = HIGH
 
 
 func _cellular(kind: int) -> void:
@@ -206,74 +267,35 @@ func _erode(kind: int) -> void:
 		for y in range(1, HEIGHT - 1):
 			for x in range(1, WIDTH - 1):
 				var i := _i(x, y)
-				if _biome[i] != kind:
-					continue
-				if _neighbors4(x, y, kind) < 2:
+				if _biome[i] == kind and _neighbors4(x, y, kind) < 2:
 					next[i] = GRASS
 		_biome = next
 
 
-func _cull_pond() -> void:
-	var keep := _largest_blob(WATER, 12, true)
+func _cull_kind(kind: int, min_count: int, drop_thin: bool) -> void:
+	var blobs := _blobs(kind, min_count, drop_thin)
+	var keep: Dictionary = {}
+	var limit := 1
+	if kind == WATER and _pond_keep >= 2:
+		limit = 2
+	if kind == WATER and _pond_keep == 0:
+		limit = 0
+	var used := 0
+	for blob in blobs:
+		if used >= limit:
+			break
+		var piece: Dictionary = blob
+		for key in piece.keys():
+			keep[key] = true
+		used += 1
 	for i in _biome.size():
-		if _biome[i] == WATER and not keep.has(i):
+		if _biome[i] == kind and not keep.has(i):
 			_biome[i] = GRASS
 
 
-func _cull_high() -> void:
-	var rect := _largest_high_rect()
-	for i in _biome.size():
-		if _biome[i] == HIGH:
-			_biome[i] = GRASS
-	_plateau_ok = rect[2] >= 4 and rect[3] >= 4
-	if not _plateau_ok:
-		return
-	for y in range(rect[1], rect[1] + rect[3]):
-		for x in range(rect[0], rect[0] + rect[2]):
-			if x <= 1 or y <= 1 or x >= WIDTH - 2 or y >= HEIGHT - 2:
-				_plateau_ok = false
-				return
-	if not _plateau_ok:
-		return
-	for y in range(rect[1], rect[1] + rect[3]):
-		for x in range(rect[0], rect[0] + rect[2]):
-			_biome[_i(x, y)] = HIGH
-	_plat = rect
-
-
-func _largest_high_rect() -> Array:
-	var best := [0, 0, 0, 0]
-	var best_area := 0
-	for y0 in range(1, HEIGHT - 1):
-		var run := PackedInt32Array()
-		run.resize(WIDTH)
-		for x in WIDTH:
-			var h := 0
-			for y in range(y0, HEIGHT - 1):
-				if _biome[_i(x, y)] != HIGH:
-					break
-				h += 1
-			run[x] = h
-		for h in range(4, 16):
-			var x := 0
-			while x < WIDTH:
-				if run[x] < h:
-					x += 1
-					continue
-				var x1 := x
-				while x1 < WIDTH and run[x1] >= h:
-					x1 += 1
-				var w := x1 - x
-				if w >= 4 and w * h > best_area:
-					best_area = w * h
-					best = [x, y0, w, h]
-				x = x1
-	return best
-
-
-func _largest_blob(kind: int, min_count: int, drop_thin: bool) -> Dictionary:
+func _blobs(kind: int, min_count: int, drop_thin: bool) -> Array:
 	var seen := {}
-	var best: Dictionary = {}
+	var found: Array = []
 	for y in range(1, HEIGHT - 1):
 		for x in range(1, WIDTH - 1):
 			var start := _i(x, y)
@@ -306,30 +328,29 @@ func _largest_blob(kind: int, min_count: int, drop_thin: bool) -> Dictionary:
 						continue
 					seen[ni] = true
 					stack.append(ni)
-			var thin := max_x - min_x < 2 or max_y - min_y < 2
+			var thin := max_x - min_x < 2 or max_y - min_y < 2 or blob.size() == 4
 			if blob.size() < min_count:
 				continue
 			if drop_thin and thin:
 				continue
-			if blob.size() == 4:
-				continue
-			if blob.size() > best.size():
-				best = blob
-	return best
+			found.append(blob)
+	found.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.size() > b.size())
+	return found
 
 
 func _open_pond() -> void:
-	_fill_pond_holes()
+	if _count(WATER) == 0:
+		return
+	_fill_holes()
 	var allowed := _biome.duplicate()
 	var core := PackedInt32Array()
 	core.resize(_biome.size())
 	for y in range(1, HEIGHT - 1):
 		for x in range(1, WIDTH - 1):
-			var i := _i(x, y)
-			if _biome[i] != WATER:
+			if _biome[_i(x, y)] != WATER:
 				continue
 			if _water_run(x, y, 1, 0) >= 6 and _water_run(x, y, 0, 1) >= 6:
-				core[i] = WATER
+				core[_i(x, y)] = WATER
 	for _d in 2:
 		var grown := core.duplicate()
 		for y in range(1, HEIGHT - 1):
@@ -343,53 +364,10 @@ func _open_pond() -> void:
 	for i in _biome.size():
 		if allowed[i] == WATER:
 			_biome[i] = WATER if core[i] == WATER else GRASS
-	_cull_pond()
+	_cull_kind(WATER, 12, true)
 
 
-func _water_run(x: int, y: int, dx: int, dy: int) -> int:
-	var n := 1
-	var s := 1
-	while _water_at(x + dx * s, y + dy * s):
-		n += 1
-		s += 1
-	s = 1
-	while _water_at(x - dx * s, y - dy * s):
-		n += 1
-		s += 1
-	return n
-
-
-func _core_touch(core: PackedInt32Array, x: int, y: int) -> bool:
-	for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-		var dir: Vector2i = step
-		var nx := x + dir.x
-		var ny := y + dir.y
-		if _inside(nx, ny) and core[_i(nx, ny)] == WATER:
-			return true
-	return false
-
-
-func _pond_bounds() -> Array:
-	var min_x := WIDTH
-	var max_x := 0
-	var min_y := HEIGHT
-	var max_y := 0
-	var n := 0
-	for y in HEIGHT:
-		for x in WIDTH:
-			if _biome[_i(x, y)] != WATER:
-				continue
-			n += 1
-			min_x = mini(min_x, x)
-			max_x = maxi(max_x, x)
-			min_y = mini(min_y, y)
-			max_y = maxi(max_y, y)
-	if n == 0:
-		return []
-	return [min_x, max_x, min_y, max_y]
-
-
-func _fill_pond_holes() -> void:
+func _fill_holes() -> void:
 	var seen := {}
 	var stack: Array[Vector2i] = []
 	for x in WIDTH:
@@ -400,10 +378,10 @@ func _fill_pond_holes() -> void:
 		stack.append(Vector2i(WIDTH - 1, y))
 	while stack.size() > 0:
 		var cur: Vector2i = stack.pop_back()
-		var k := _key(cur.x, cur.y)
-		if seen.has(k) or not _inside(cur.x, cur.y):
+		if not _inside(cur.x, cur.y):
 			continue
-		if _biome[_i(cur.x, cur.y)] == WATER:
+		var k := _key(cur.x, cur.y)
+		if seen.has(k) or _biome[_i(cur.x, cur.y)] == WATER:
 			continue
 		seen[k] = true
 		for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
@@ -411,178 +389,228 @@ func _fill_pond_holes() -> void:
 			stack.append(cur + dir)
 	for y in range(1, HEIGHT - 1):
 		for x in range(1, WIDTH - 1):
-			if _biome[_i(x, y)] == WATER:
-				continue
-			if seen.has(_key(x, y)):
-				continue
-			_biome[_i(x, y)] = WATER
+			if _biome[_i(x, y)] != WATER and not seen.has(_key(x, y)):
+				_biome[_i(x, y)] = WATER
+
+
+func _keep_plateau_rect() -> void:
+	var best := [0, 0, 0, 0]
+	var best_area := 0
+	for y0 in range(2, HEIGHT - 2):
+		var run := PackedInt32Array()
+		run.resize(WIDTH)
+		for x in WIDTH:
+			var h := 0
+			for y in range(y0, HEIGHT - 2):
+				if _biome[_i(x, y)] != HIGH:
+					break
+				h += 1
+			run[x] = h
+		for h in range(4, 14):
+			var x := 0
+			while x < WIDTH:
+				if run[x] < h:
+					x += 1
+					continue
+				var x1 := x
+				while x1 < WIDTH and run[x1] >= h:
+					x1 += 1
+				var w := x1 - x
+				if w >= 4 and w * h > best_area and x > 1 and x + w < WIDTH - 1 and y0 + h < HEIGHT - 1:
+					best_area = w * h
+					best = [x, y0, w, h]
+				x = x1
+	for i in _biome.size():
+		if _biome[i] == HIGH:
+			_biome[i] = GRASS
+	_plateau_ok = best[2] >= 4 and best[3] >= 4
+	if not _plateau_ok:
+		return
+	_plat = best
+	for y in range(best[1], best[1] + best[3]):
+		for x in range(best[0], best[0] + best[2]):
+			_biome[_i(x, y)] = HIGH
 
 
 func _place_anchors() -> void:
-	var rise := 0
-	if _use_rise:
-		rise = 2 + int(_hash2(7, 11) * 3.0)
-	var hx := 44 + int(_hash2(9, 2) * 8.0)
-	var hy := 10 + int(_hash2(3, 8) * 6.0)
-	if _plateau_ok:
-		hx = maxi(hx, int(_plat[0]) + int(_plat[2]) + 3)
-		hy = maxi(hy, int(_plat[1]) + 2)
-	house = Vector2i(clampi(hx, 36, WIDTH - 8), clampi(hy, 6, 22))
-	var door_y := house.y + 4
-	if recipe == "C":
-		var bounds := _pond_bounds()
-		if bounds.size() == 4:
-			var north := int(bounds[2]) - 3
-			if north >= 8:
-				door_y = north
-				house = Vector2i(clampi(int(bounds[1]) - 3, 36, WIDTH - 8), maxi(door_y - 4, 4))
-			else:
-				door_y = int(bounds[3]) + 3
-				house = Vector2i(clampi(int(bounds[1]) - 3, 36, WIDTH - 8), door_y - 4)
-	spawn = Vector2i(4, door_y + rise)
-	if spawn.y > HEIGHT - 4:
-		spawn.y = HEIGHT - 4
-		door_y = spawn.y - rise
-		house.y = maxi(door_y - 4, 6)
-	door = Vector2i(house.x, door_y)
-
-
-func _clearest_row(y0: int, y1: int) -> int:
-	var best_y := y0
-	var best := -1
-	for y in range(y0, y1):
-		var run := 0
-		for x in range(2, WIDTH - 2):
-			if _biome[_i(x, y)] == GRASS and _biome[_i(x, y + 1)] == GRASS:
-				run += 1
-		if run > best:
-			best = run
-			best_y = y
-	return best_y
-
-
-func _flatten(cx: int, cy: int, radius: int) -> void:
-	for y in range(cy - radius, cy + radius + 1):
-		for x in range(cx - radius, cx + radius + 1):
-			if not _inside(x, y):
-				continue
-			if Vector2(x - cx, y - cy).length() > float(radius):
-				continue
-			_biome[_i(x, y)] = GRASS
-			_feat[_i(x, y)] = 0
-
-
-func _delete_pond() -> void:
-	for i in _biome.size():
-		if _biome[i] == WATER:
-			_biome[i] = GRASS
-			_feat[i] = 0
-
-
-func _astar(start: Vector2i, goal: Vector2i) -> Array:
-	var open: Array[Vector2i] = [start]
-	var gscore := {_key(start.x, start.y): 0}
-	var came := {}
-	var guard := 0
-	while open.size() > 0 and guard < WIDTH * HEIGHT:
-		guard += 1
-		var best_i := 0
-		var best_f := 1 << 30
-		for i in open.size():
-			var p: Vector2i = open[i]
-			var f := int(gscore[_key(p.x, p.y)]) + absi(p.x - goal.x) + absi(p.y - goal.y)
-			if f < best_f:
-				best_f = f
-				best_i = i
-		var cur: Vector2i = open[best_i]
-		open.remove_at(best_i)
-		if cur == goal:
-			return _rebuild(came, cur)
-		for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			var dir: Vector2i = step
-			var nxt := cur + dir
-			if not _walkable(nxt.x, nxt.y):
-				continue
-			var nk := _key(nxt.x, nxt.y)
-			var ng := int(gscore[_key(cur.x, cur.y)]) + 1
-			if gscore.has(nk) and ng >= int(gscore[nk]):
-				continue
-			came[nk] = cur
-			gscore[nk] = ng
-			if not open.has(nxt):
-				open.append(nxt)
-	return []
-
-
-func _rebuild(came: Dictionary, cur: Vector2i) -> Array:
-	var out: Array = [cur]
-	var guard := 0
-	while came.has(_key(cur.x, cur.y)) and guard < WIDTH * HEIGHT:
-		cur = came[_key(cur.x, cur.y)]
-		out.append(cur)
-		guard += 1
-	out.reverse()
-	return out
-
-
-func _walkable(x: int, y: int) -> bool:
-	if x < 1 or y < 1 or x >= WIDTH - 1 or y >= HEIGHT - 1:
-		return false
-	var b := _biome[_i(x, y)]
-	return b == GRASS or b == DIRT
-
-
-func _lay_path(route: Array) -> void:
-	var low_n := spawn.y
-	var rise := 0
-	if _use_rise:
-		rise = clampi(low_n - door.y, 2, 4)
-	if rise == 1:
-		rise = 2
-	var knuckle := _knuckle_x(route, rise)
-	var east_x := clampi(door.x, knuckle + 6, WIDTH - 4)
-	var band_y := low_n if rise == 0 else low_n - rise
-	while east_x > knuckle + 6 and not _band_clear(east_x, band_y):
-		east_x -= 1
-	_low_n = low_n
-	_rise = rise
-	_knuckle = knuckle
-	_east_x = east_x
-	if rise == 0:
-		_ribbon_h(2, east_x, low_n, true, true)
+	var from_east := _rid == 10
+	var row := 26
+	if _rid == 7:
+		row = int(HEIGHT * 0.72)
+	elif _rid == 5:
+		row = 20
+	if _pond_keep > 0:
+		var alt := _row_off_water(row)
+		if alt >= 0:
+			row = alt
+	spawn = Vector2i(WIDTH - 5 if from_east else 4, row)
+	if _has_house:
+		var hx := 14 if _rid == 10 else 46
+		var hy := row - 6
+		if _rid == 7:
+			hy = 10
+		if _plateau_ok:
+			hy = int(_plat[1]) + int(_plat[3]) + 3
+			hx = int(_plat[0]) + int(_plat[2] / 2)
+		house = Vector2i(clampi(hx, 8, WIDTH - 8), clampi(hy, 6, HEIGHT - 10))
+		door = Vector2i(house.x, house.y + 4)
 	else:
-		var high_n := low_n - rise
-		_ribbon_h(2, knuckle, low_n, true, false)
-		_ribbon_v(knuckle - 1, high_n, low_n + 1)
-		_ribbon_h(knuckle - 1, east_x, high_n, false, true)
-		_stamp_step(knuckle - 1, knuckle, low_n, high_n)
-	if _second_trunk:
-		_lay_cross_arm(knuckle)
-	door = Vector2i(mini(east_x - 1, door.x), low_n if rise == 0 else low_n - rise)
+		house = Vector2i(WIDTH / 2, HEIGHT / 2)
+		door = Vector2i(WIDTH - 5 if not from_east else 4, row)
+	if _rid == 19:
+		spawn = Vector2i(4, 28)
+		house = Vector2i(24, 14)
+		door = Vector2i(24, 18)
 
 
-func _band_clear(x: int, y: int) -> bool:
-	if not _inside(x, y) or not _inside(x, y + 1):
-		return false
-	for yy in [y, y + 1]:
-		var b := _biome[_i(x, yy)]
-		if b == WATER or b == HIGH:
-			return false
-	return true
+func _row_off_water(prefer: int) -> int:
+	if _span_clear(prefer, WIDTH - 6):
+		return prefer
+	for dist in range(1, HEIGHT):
+		for y in [prefer - dist, prefer + dist]:
+			if _span_clear(y, WIDTH - 6):
+				return y
+	return -1
 
 
-func _knuckle_x(route: Array, rise: int) -> int:
-	var guess := 24
-	for p in route:
-		var cell: Vector2i = p
-		if cell.y != spawn.y:
-			guess = cell.x
-			break
-	if route.is_empty():
-		guess = 18 + int(_hash2(4, 8) * 16.0)
-	if rise == 0:
-		return clampi(guess, 12, WIDTH - 16)
-	return clampi(guess, 12, door.x - 6)
+func _lay_path(_route: Array) -> void:
+	match _rid:
+		1:
+			_crossroads()
+		5:
+			_edge_trunk()
+		9:
+			_three_way()
+		15:
+			_double_lean()
+		19:
+			_switchback()
+		_:
+			_single_lean(_rid == 10)
+
+
+func _edge_trunk() -> void:
+	_low_n = spawn.y
+	_west_x = 2
+	_east_x = WIDTH - 3
+	_rise = 0
+	_ribbon_h(_west_x, _east_x, _low_n, true, true)
+
+
+func _single_lean(from_east: bool) -> void:
+	_low_n = spawn.y
+	_rise = 3 if _rid != 2 and _rid != 7 and _rid != 12 and _rid != 18 else 0
+	if _rid == 4 or _rid == 0 or _rid == 10 or _rid == 11 or _rid == 8:
+		_rise = 3
+	if _rid == 13 or _rid == 14 or _rid == 17 or _rid == 3:
+		_rise = 2
+	_west_x = 2
+	_east_x = clampi(door.x, 16, WIDTH - 4)
+	_knuckle = clampi(_west_x + 14, 12, _east_x - 6)
+	if from_east:
+		_west_x = 8
+		_east_x = WIDTH - 3
+		_knuckle = clampi(door.x + 8, _west_x + 6, _east_x - 8)
+	if _rise <= 0:
+		_ribbon_h(_west_x, _east_x, _low_n, true, true)
+		return
+	var high_n := _low_n - _rise
+	if high_n < 4:
+		_rise = 0
+		_ribbon_h(_west_x, _east_x, _low_n, true, true)
+		return
+	_ribbon_h(_west_x, _knuckle, _low_n, true, false)
+	_ribbon_v(_knuckle - 1, high_n, _low_n + 1)
+	_ribbon_h(_knuckle - 1, _east_x, high_n, false, true)
+	_stamp_step(_knuckle - 1, _knuckle, _low_n, high_n)
+	door = Vector2i(_east_x, high_n)
+
+
+func _crossroads() -> void:
+	_low_n = spawn.y
+	_west_x = 3
+	_east_x = clampi(door.x, 36, WIDTH - 4)
+	_knuckle = 28
+	_rise = 0
+	_ribbon_h(_west_x, _east_x, _low_n, true, true)
+	var top := 4
+	for y in range(top, _low_n):
+		_add_path(_knuckle - 1, y)
+		_add_path(_knuckle, y)
+	for y in range(top + 1, _low_n):
+		_set_path_tile(_knuckle - 1, y, Vector2i(21, 1))
+		_set_path_tile(_knuckle, y, Vector2i(23, 1))
+	_set_path_tile(_knuckle - 1, top, Vector2i(21, 0))
+	_set_path_tile(_knuckle, top, Vector2i(23, 0))
+	_set_path_tile(_knuckle - 1, _low_n, Vector2i(23, 5))
+	_set_path_tile(_knuckle, _low_n, Vector2i(21, 5))
+
+
+func _three_way() -> void:
+	_crossroads()
+	var arm_x := 44
+	var top := _low_n - 8
+	for y in range(top, _low_n):
+		_add_path(arm_x, y)
+		_add_path(arm_x + 1, y)
+	for y in range(top + 1, _low_n):
+		_set_path_tile(arm_x, y, Vector2i(21, 1))
+		_set_path_tile(arm_x + 1, y, Vector2i(23, 1))
+	_set_path_tile(arm_x, top, Vector2i(21, 0))
+	_set_path_tile(arm_x + 1, top, Vector2i(23, 0))
+	_set_path_tile(arm_x, _low_n, Vector2i(23, 5))
+	_set_path_tile(arm_x + 1, _low_n, Vector2i(21, 5))
+
+
+func _double_lean() -> void:
+	_low_n = spawn.y
+	_west_x = 2
+	_east_x = clampi(door.x, 48, WIDTH - 4)
+	var k1 := 18
+	var k2 := 36
+	var rise := 3
+	var mid_n := _low_n - rise
+	var high_n := mid_n - rise
+	_rise = rise
+	_knuckle = k2
+	_ribbon_h(_west_x, k1, _low_n, true, false)
+	_ribbon_v(k1 - 1, mid_n, _low_n + 1)
+	_ribbon_h(k1 - 1, k2, mid_n, false, false)
+	_ribbon_v(k2 - 1, high_n, mid_n + 1)
+	_ribbon_h(k2 - 1, _east_x, high_n, false, true)
+	_stamp_step(k1 - 1, k1, _low_n, mid_n)
+	_stamp_step(k2 - 1, k2, mid_n, high_n)
+	door = Vector2i(_east_x, high_n)
+
+
+func _switchback() -> void:
+	# U back to the west edge. Two 90° knuckles, no 1-tile stair.
+	_west_x = 3
+	_east_x = 40
+	_knuckle = 40
+	var top_n := 18
+	var bot_n := 28
+	_low_n = bot_n
+	_rise = 0
+	_ribbon_h(_west_x, _east_x, bot_n, true, false)
+	_ribbon_v(_east_x - 1, top_n, bot_n + 1)
+	_ribbon_h(_west_x, _east_x, top_n, true, false)
+	for y in range(top_n + 2, bot_n):
+		_set_path_tile(_east_x - 1, y, Vector2i(21, 1))
+		_set_path_tile(_east_x, y, Vector2i(23, 1))
+	# Lower knuckle: east then north.
+	_set_path_tile(_east_x - 1, bot_n + 1, Vector2i(22, 2))
+	_set_path_tile(_east_x, bot_n + 1, Vector2i(23, 2))
+	_set_path_tile(_east_x, bot_n, Vector2i(23, 1))
+	_set_path_tile(_east_x - 1, bot_n, Vector2i(23, 5))
+	# Upper knuckle: north then west. Outside is north and east.
+	_set_path_tile(_east_x - 1, top_n, Vector2i(22, 0))
+	_set_path_tile(_east_x, top_n, Vector2i(23, 0))
+	_set_path_tile(_east_x - 1, top_n + 1, Vector2i(23, 3))
+	_set_path_tile(_east_x, top_n + 1, Vector2i(23, 1))
+	spawn = Vector2i(6, bot_n)
+	door = Vector2i(22, top_n)
+	house = Vector2i(22, top_n - 4)
 
 
 func _ribbon_h(x0: int, x1: int, y: int, west_cap: bool, east_cap: bool) -> void:
@@ -623,23 +651,14 @@ func _stamp_step(inner_x: int, outer_x: int, low_n: int, high_n: int) -> void:
 	_set_path_tile(outer_x, high_s, Vector2i(21, 3))
 
 
-func _lay_cross_arm(kx: int) -> void:
-	var top := 4
-	var hy := spawn.y
-	for y in range(top, hy):
-		_add_path(kx - 1, y)
-		_add_path(kx, y)
-	for y in range(top + 1, hy):
-		_set_path_tile(kx - 1, y, Vector2i(21, 1))
-		_set_path_tile(kx, y, Vector2i(23, 1))
-	_set_path_tile(kx - 1, top, Vector2i(21, 0))
-	_set_path_tile(kx, top, Vector2i(23, 0))
-	_set_path_tile(kx - 1, hy, Vector2i(23, 5))
-	_set_path_tile(kx, hy, Vector2i(21, 5))
+func _force_geometry() -> void:
+	_lay_path([])
 
 
 func _add_path(x: int, y: int) -> void:
 	if not _inside(x, y):
+		return
+	if _biome[_i(x, y)] == WATER or _biome[_i(x, y)] == HIGH:
 		return
 	_path[_key(x, y)] = true
 	var i := _i(x, y)
@@ -648,9 +667,10 @@ func _add_path(x: int, y: int) -> void:
 
 
 func _set_path_tile(x: int, y: int, tile: Vector2i) -> void:
-	if not _inside(x, y):
+	if not _path.has(_key(x, y)):
+		_add_path(x, y)
+	if not _path.has(_key(x, y)):
 		return
-	_add_path(x, y)
 	var i := _i(x, y)
 	_fax[i] = tile.x
 	_fay[i] = tile.y
@@ -673,49 +693,20 @@ func _path_gid(x: int, y: int) -> Vector2i:
 	var w := _path.has(_key(x - 1, y))
 	var mask := (1 if n else 0) | (2 if e else 0) | (4 if s else 0) | (8 if w else 0)
 	match mask:
-		15:
-			return Vector2i(22, 1)
-		14:
-			return Vector2i(22, 0)
-		11:
-			return Vector2i(22, 2)
-		7:
-			return Vector2i(21, 1)
-		13:
-			return Vector2i(23, 1)
-		6:
-			return Vector2i(23, 5)
-		12:
-			return Vector2i(21, 5)
-		3:
-			return Vector2i(23, 3)
-		9:
-			return Vector2i(21, 3)
-		2:
-			return Vector2i(21, 0)
-		8:
-			return Vector2i(23, 0)
-		4:
-			return Vector2i(22, 2)
-		1:
-			return Vector2i(22, 0)
-		_:
-			return Vector2i(22, 0)
-
-
-func _force_ends_and_knuckles() -> void:
-	# Autotile paints the inner knuckle as fill. Stamp caps and bites again.
-	if _rise == 0:
-		_ribbon_h(2, _east_x, _low_n, true, true)
-		if _second_trunk:
-			_lay_cross_arm(_knuckle)
-		return
-	var high_n := _low_n - _rise
-	_ribbon_h(2, _knuckle, _low_n, true, false)
-	_ribbon_h(_knuckle - 1, _east_x, high_n, false, true)
-	_stamp_step(_knuckle - 1, _knuckle, _low_n, high_n)
-	if _second_trunk:
-		_lay_cross_arm(_knuckle)
+		15: return Vector2i(22, 1)
+		14: return Vector2i(22, 0)
+		11: return Vector2i(22, 2)
+		7: return Vector2i(21, 1)
+		13: return Vector2i(23, 1)
+		6: return Vector2i(23, 5)
+		12: return Vector2i(21, 5)
+		3: return Vector2i(23, 3)
+		9: return Vector2i(21, 3)
+		2: return Vector2i(21, 0)
+		8: return Vector2i(23, 0)
+		4: return Vector2i(22, 2)
+		1: return Vector2i(22, 0)
+		_: return Vector2i(22, 0)
 
 
 func _shore_pond() -> void:
@@ -723,10 +714,10 @@ func _shore_pond() -> void:
 		for x in WIDTH:
 			if _biome[_i(x, y)] != WATER:
 				continue
-			var n := _water_at(x, y - 1)
-			var e := _water_at(x + 1, y)
-			var s := _water_at(x, y + 1)
-			var w := _water_at(x - 1, y)
+			var n := _is(WATER, x, y - 1)
+			var e := _is(WATER, x + 1, y)
+			var s := _is(WATER, x, y + 1)
+			var w := _is(WATER, x - 1, y)
 			var tile := Vector2i(45, 1)
 			if not n and not w:
 				tile = Vector2i(44, 0)
@@ -750,21 +741,15 @@ func _shore_pond() -> void:
 			_fay[i] = tile.y
 
 
-func _water_at(x: int, y: int) -> bool:
-	return _inside(x, y) and _biome[_i(x, y)] == WATER
-
-
 func _reeds() -> void:
 	var placed := 0
 	for y in range(1, HEIGHT - 1):
 		for x in range(1, WIDTH - 1):
-			if placed >= 3:
-				return
-			if _biome[_i(x, y)] != WATER:
+			if placed >= 3 or _biome[_i(x, y)] != WATER:
 				continue
-			if _water_at(x, y + 1):
+			if _is(WATER, x, y + 1):
 				continue
-			if _hash2(x, y + 6) > 0.35:
+			if _hash2(x, y + 3) > 0.4:
 				continue
 			_deco[_i(x, y)] = 47 + 5 * 51
 			placed += 1
@@ -775,9 +760,9 @@ func _cliff_autotile() -> void:
 		for x in WIDTH:
 			if _biome[_i(x, y)] != HIGH:
 				continue
-			var s := _inside(x, y + 1) and _biome[_i(x, y + 1)] == HIGH
-			var w := _inside(x - 1, y) and _biome[_i(x - 1, y)] == HIGH
-			var e := _inside(x + 1, y) and _biome[_i(x + 1, y)] == HIGH
+			var s := _is(HIGH, x, y + 1)
+			var w := _is(HIGH, x - 1, y)
+			var e := _is(HIGH, x + 1, y)
 			var tile := Vector2i(5, 13)
 			if not s and not w:
 				tile = Vector2i(4, 15)
@@ -799,41 +784,46 @@ func _yard() -> Array:
 	var props: Array = []
 	var left_x := house.x - 5
 	var right_x := house.x + 5
-	var top_y := house.y - 4
-	var bottom_y := house.y + 4
+	var top_y := house.y - 3
+	var bottom_y := house.y + 3
+	if _gate_only:
+		left_x = door.x - 2
+		right_x = door.x + 3
+		top_y = door.y
+		bottom_y = door.y
 	var rails := [Vector2i(30, 24), Vector2i(30, 25), Vector2i(30, 27)]
-	props.append(_fence_piece(left_x, top_y, Vector2i(29, 24)))
-	props.append(_fence_piece(right_x, top_y, Vector2i(31, 25)))
-	props.append(_fence_piece(left_x, bottom_y, Vector2i(29, 27)))
-	props.append(_fence_piece(right_x, bottom_y, Vector2i(31, 27)))
+	if not _gate_only:
+		props.append(_fence_piece(left_x, top_y, Vector2i(29, 24)))
+		props.append(_fence_piece(right_x, top_y, Vector2i(31, 25)))
+		props.append(_fence_piece(left_x, bottom_y, Vector2i(29, 27)))
+		props.append(_fence_piece(right_x, bottom_y, Vector2i(31, 27)))
+	var gate_a := door.x
+	var gate_b := door.x + 1
 	for x in range(left_x + 1, right_x):
-		props.append(_fence_piece(x, top_y, rails[posmod(x, rails.size())]))
-		if _gate and (x == door.x or x == door.x + 1):
+		if not _gate_only:
+			props.append(_fence_piece(x, top_y, rails[posmod(x, 3)]))
+		if x == gate_a or x == gate_b:
 			continue
-		props.append(_fence_piece(x, bottom_y, rails[posmod(x + 1, rails.size())]))
-	for y in range(top_y + 1, bottom_y):
-		props.append(_fence_piece(left_x, y, Vector2i(29, 26)))
-		props.append(_fence_piece(right_x, y, Vector2i(31, 26)))
+		props.append(_fence_piece(x, bottom_y, rails[posmod(x + 1, 3)]))
+	if not _gate_only:
+		for y in range(top_y + 1, bottom_y):
+			props.append(_fence_piece(left_x, y, Vector2i(29, 26)))
+			props.append(_fence_piece(right_x, y, Vector2i(31, 26)))
 	return props
 
 
 func _fence_piece(x: int, y: int, gid: Vector2i) -> Dictionary:
-	return {
-		"tile": Vector2i(x, y),
-		"region": Rect2(gid.x * 16, gid.y * 16, 16, 16),
-		"body": Vector2(14, 8),
-	}
+	return {"tile": Vector2i(x, y), "region": Rect2(gid.x * 16, gid.y * 16, 16, 16), "body": Vector2(14, 8)}
 
 
 func _trees() -> Array:
 	var regions := [
-		Rect2(464, 180, 64, 75),
-		Rect2(530, 181, 77, 87),
-		Rect2(464, 292, 64, 75),
-		Rect2(530, 293, 77, 87),
+		Rect2(464, 180, 64, 75), Rect2(530, 181, 77, 87),
+		Rect2(464, 292, 64, 75), Rect2(530, 293, 77, 87),
 	]
 	var props: Array = []
-	var spots := _poisson(6.0, 36, 5)
+	var want := _tree_min + int(_hash2(2, 9) * float(_tree_max - _tree_min + 1))
+	var spots := _poisson(_tree_gap, 48, want)
 	for i in spots.size():
 		props.append({"tile": spots[i], "region": regions[i % regions.size()], "body": Vector2(14, 8)})
 	return props
@@ -848,9 +838,9 @@ func _poisson(min_dist: float, budget: int, limit: int) -> Array[Vector2i]:
 		var y := _rng.randi_range(3, HEIGHT - 4)
 		if _biome[_i(x, y)] != GRASS:
 			continue
-		if absi(x - house.x) <= 7 and absi(y - house.y) <= 7:
+		if _has_house and absi(x - house.x) <= 6 and absi(y - house.y) <= 6:
 			continue
-		if absi(x - spawn.x) <= 4 and absi(y - spawn.y) <= 3:
+		if absi(x - spawn.x) <= 3 and absi(y - spawn.y) <= 3:
 			continue
 		var ok := true
 		for p in pts:
@@ -862,20 +852,71 @@ func _poisson(min_dist: float, budget: int, limit: int) -> Array[Vector2i]:
 	return pts
 
 
-func _scatter_later() -> void:
-	pass
-
-
 func _flowers() -> void:
 	var flowers := [Vector2i(8, 2), Vector2i(9, 2), Vector2i(8, 3), Vector2i(9, 3), Vector2i(10, 3), Vector2i(9, 5)]
 	for y in range(1, HEIGHT - 1):
 		for x in range(1, WIDTH - 1):
 			if _biome[_i(x, y)] != GRASS:
 				continue
-			if _hash2(x + 5, y + 9) > 0.08:
+			if _near_fence and (absi(x - house.x) > 8 or absi(y - house.y) > 8):
+				continue
+			if _hash2(x + 5, y + 9) > _deco_p:
 				continue
 			var flower: Vector2i = flowers[int(_hash2(x, y + 4) * flowers.size()) % flowers.size()]
 			_deco[_i(x, y)] = flower.x + flower.y * 51
+
+
+func _astar(start: Vector2i, goal: Vector2i) -> Array:
+	var open: Array[Vector2i] = [start]
+	var gscore := {_key(start.x, start.y): 0}
+	var came := {}
+	var guard := 0
+	while open.size() > 0 and guard < WIDTH * HEIGHT:
+		guard += 1
+		var best_i := 0
+		var best_f := 1 << 30
+		for i in open.size():
+			var p: Vector2i = open[i]
+			var f: int = int(gscore[_key(p.x, p.y)]) + absi(p.x - goal.x) + absi(p.y - goal.y)
+			if f < best_f:
+				best_f = f
+				best_i = i
+		var cur: Vector2i = open[best_i]
+		open.remove_at(best_i)
+		if cur == goal:
+			return _rebuild(came, cur)
+		for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var dir: Vector2i = step
+			var nxt := cur + dir
+			if not _walkable(nxt.x, nxt.y):
+				continue
+			var nk := _key(nxt.x, nxt.y)
+			var ng := int(gscore[_key(cur.x, cur.y)]) + 1
+			if gscore.has(nk) and ng >= int(gscore[nk]):
+				continue
+			came[nk] = cur
+			gscore[nk] = ng
+			if not open.has(nxt):
+				open.append(nxt)
+	return []
+
+
+func _rebuild(came: Dictionary, cur: Vector2i) -> Array:
+	var out: Array = [cur]
+	var guard := 0
+	while came.has(_key(cur.x, cur.y)) and guard < WIDTH * HEIGHT:
+		cur = came[_key(cur.x, cur.y)]
+		out.append(cur)
+		guard += 1
+	out.reverse()
+	return out
+
+
+func _walkable(x: int, y: int) -> bool:
+	if not _inside(x, y) or x < 1 or y < 1 or x >= WIDTH - 1 or y >= HEIGHT - 1:
+		return false
+	var b := _biome[_i(x, y)]
+	return b == GRASS or b == DIRT
 
 
 func _reaches(start: Vector2i, goal: Vector2i) -> bool:
@@ -883,7 +924,7 @@ func _reaches(start: Vector2i, goal: Vector2i) -> bool:
 	var stack: Array[Vector2i] = [start]
 	while stack.size() > 0:
 		var cur: Vector2i = stack.pop_back()
-		if absi(cur.x - goal.x) <= 1 and absi(cur.y - goal.y) <= 1:
+		if absi(cur.x - goal.x) + absi(cur.y - goal.y) <= 2:
 			return true
 		for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 			var dir: Vector2i = step
@@ -923,6 +964,62 @@ func _fill_on_rim() -> int:
 	return n
 
 
+func _span_clear(y: int, x1: int) -> bool:
+	if y < 2 or y >= HEIGHT - 3:
+		return false
+	for x in range(2, x1 + 1):
+		if not _inside(x, y) or not _inside(x, y + 1):
+			return false
+		if _biome[_i(x, y)] == WATER or _biome[_i(x, y + 1)] == WATER:
+			return false
+		if _biome[_i(x, y)] == HIGH or _biome[_i(x, y + 1)] == HIGH:
+			return false
+	return true
+
+
+func _flatten(cx: int, cy: int, radius: int) -> void:
+	for y in range(cy - radius, cy + radius + 1):
+		for x in range(cx - radius, cx + radius + 1):
+			if not _inside(x, y):
+				continue
+			if Vector2(x - cx, y - cy).length() > float(radius):
+				continue
+			_biome[_i(x, y)] = GRASS
+			_feat[_i(x, y)] = 0
+
+
+func _clear_kind(kind: int) -> void:
+	for i in _biome.size():
+		if _biome[i] == kind:
+			_biome[i] = GRASS
+			_feat[i] = 0
+
+
+func _water_run(x: int, y: int, dx: int, dy: int) -> int:
+	var n := 1
+	var s := 1
+	while _is(WATER, x + dx * s, y + dy * s):
+		n += 1
+		s += 1
+	s = 1
+	while _is(WATER, x - dx * s, y - dy * s):
+		n += 1
+		s += 1
+	return n
+
+
+func _core_touch(core: PackedInt32Array, x: int, y: int) -> bool:
+	for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var dir: Vector2i = step
+		if _inside(x + dir.x, y + dir.y) and core[_i(x + dir.x, y + dir.y)] == WATER:
+			return true
+	return false
+
+
+func _is(kind: int, x: int, y: int) -> bool:
+	return _inside(x, y) and _biome[_i(x, y)] == kind
+
+
 func _count(kind: int) -> int:
 	var n := 0
 	for b in _biome:
@@ -937,7 +1034,7 @@ func _neighbors8(x: int, y: int, kind: int) -> int:
 		for dx in range(-1, 2):
 			if dx == 0 and dy == 0:
 				continue
-			if _inside(x + dx, y + dy) and _biome[_i(x + dx, y + dy)] == kind:
+			if _is(kind, x + dx, y + dy):
 				n += 1
 	return n
 
@@ -946,7 +1043,7 @@ func _neighbors4(x: int, y: int, kind: int) -> int:
 	var n := 0
 	for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 		var dir: Vector2i = step
-		if _inside(x + dir.x, y + dir.y) and _biome[_i(x + dir.x, y + dir.y)] == kind:
+		if _is(kind, x + dir.x, y + dir.y):
 			n += 1
 	return n
 
