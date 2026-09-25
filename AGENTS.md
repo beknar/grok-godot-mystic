@@ -96,10 +96,10 @@ Painted Lands map (pipeline: § Painted Lands):
   `character_sprite_sheet.png` is 3×4 of 32px (two tiles tall). Row 0
   idles, row 1 walks. No attack row. Movement is still eight-direction.
   New forest seeds use `recipe = seed % 20` from the table below.
-- `scenes/wilds/wilds.tscn` — map id `74015`, recipe 15 Double lean.
-  House prefab 1. Two short rises. Irregular dirt blobs use the patch
-  atlas, then Mode A or B so the baked grass does not form a dark
-  rectangle. A land rock and one sign. Same sheet and walker.
+- `scenes/wilds/wilds.tscn` — map id `75107`, recipe 7 South road.
+  House prefab 2 (gable) sits in the north. The cobble road is a
+  straight run in the south third. Irregular dirt blobs, bushes, a
+  campfire, and torches. No pond. Same sheet and walker.
 
 There is no health, enemy, or save. The editor addon
 `addons/godot_mcp` is how this repo is driven from the Godot MCP server.

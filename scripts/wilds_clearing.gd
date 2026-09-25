@@ -29,7 +29,7 @@ func _paint_patch_grass() -> void:
 	move_child(holder, $Ground.get_index() + 1)
 	for i in blobs.size():
 		var blob: Array = blobs[i]
-		var mode_b := (74015 + i) % 2 == 1
+		var mode_b := (75107 + i) % 2 == 1
 		for c in blob:
 			var cell: Vector2i = c
 			var atlas := path.get_cell_atlas_coords(cell)

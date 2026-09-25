@@ -3,7 +3,7 @@ extends RefCounted
 # Painted Lands wilds. seed = map_id. recipe = seed % 20.
 # Paint is TILESET_brighter.png only. Thresholds are not the Mystic Woods ones.
 
-const MAP_ID := 74015
+const MAP_ID := 75107
 const WIDTH := 60
 const HEIGHT := 42
 
